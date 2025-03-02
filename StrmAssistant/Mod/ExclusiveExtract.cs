@@ -521,8 +521,9 @@ namespace StrmAssistant.Mod
         private static void GetRefreshOptionsPostfix(IReturnVoid request, MetadataRefreshOptions __result)
         {
             var id = Traverse.Create(request).Property("Id").GetValue<string>();
+            var item = BaseItem.LibraryManager.GetItemById(id);
 
-            Plugin.MediaInfoApi.QueueRefreshAlternateVersions(id, __result);
+            Plugin.MediaInfoApi.QueueRefreshAlternateVersions(item, __result, true);
         }
     }
 }

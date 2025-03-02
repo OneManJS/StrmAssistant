@@ -449,7 +449,7 @@ namespace StrmAssistant.Common
             return false;
         }
 
-        private void QueueRefreshAlternateVersions(BaseItem item, MetadataRefreshOptions options, bool force)
+        public void QueueRefreshAlternateVersions(BaseItem item, MetadataRefreshOptions options, bool force)
         {
             if (!(item is Video video)) return;
 
@@ -474,9 +474,9 @@ namespace StrmAssistant.Common
             }
         }
 
-        public void QueueRefreshAlternateVersions(BaseItem item, string mediaSourceId, MetadataRefreshOptions options)
+        public BaseItem GetItemByMediaSourceId(BaseItem item, string mediaSourceId)
         {
-            if (string.IsNullOrEmpty(mediaSourceId)) return;
+            if (string.IsNullOrEmpty(mediaSourceId)) return null;
 
             BaseItem targetItem = null;
 
@@ -494,17 +494,7 @@ namespace StrmAssistant.Common
                 }
             }
 
-            if (targetItem != null)
-            {
-                QueueRefreshAlternateVersions(targetItem, options, false);
-            }
-        }
-
-        public void QueueRefreshAlternateVersions(string itemId, MetadataRefreshOptions options)
-        {
-            var item = _libraryManager.GetItemById(itemId);
-
-            QueueRefreshAlternateVersions(item, options, true);
+            return targetItem;
         }
     }
 }

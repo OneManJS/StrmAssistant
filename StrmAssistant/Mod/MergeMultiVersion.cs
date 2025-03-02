@@ -1,9 +1,11 @@
 ﻿using HarmonyLib;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,6 +22,7 @@ namespace StrmAssistant.Mod
         private static MethodInfo _isEligibleForMultiVersion;
         private static MethodInfo _canRefreshImage;
         private static MethodInfo _addLibrariesToPresentationUniqueKey;
+        private static MethodInfo _getRefreshOptions;
 
         public static readonly AsyncLocal<BaseItem[]> CurrentAllCollectionFolders = new AsyncLocal<BaseItem[]>();
 
@@ -45,6 +48,11 @@ namespace StrmAssistant.Mod
             _canRefreshImage = providerManager.GetMethod("CanRefresh", BindingFlags.Instance | BindingFlags.NonPublic);
             _addLibrariesToPresentationUniqueKey = typeof(Series).GetMethod("AddLibrariesToPresentationUniqueKey",
                 BindingFlags.NonPublic | BindingFlags.Instance);
+
+            var embyApi = Assembly.Load("Emby.Api");
+            var itemRefreshService = embyApi.GetType("Emby.Api.ItemRefreshService");
+            _getRefreshOptions =
+                itemRefreshService.GetMethod("GetRefreshOptions", BindingFlags.Instance | BindingFlags.NonPublic);
         }
 
         protected override void Prepare(bool apply)
@@ -54,6 +62,7 @@ namespace StrmAssistant.Mod
             PatchUnpatch(PatchTracker, apply, _canRefreshImage, prefix: nameof(CanRefreshImagePrefix));
             PatchUnpatch(PatchTracker, apply, _addLibrariesToPresentationUniqueKey,
                 prefix: nameof(AddLibrariesToPresentationUniqueKeyPrefix));
+            PatchUnpatch(PatchTracker, apply, _getRefreshOptions, postfix: nameof(GetRefreshOptionsPostfix));
         }
 
         [HarmonyPrefix]
@@ -138,6 +147,27 @@ namespace StrmAssistant.Mod
             }
 
             return true;
+        }
+
+        [HarmonyPostfix]
+        private static void GetRefreshOptionsPostfix(IReturnVoid request, MetadataRefreshOptions __result)
+        {
+            var id = Traverse.Create(request).Property("Id").GetValue<string>();
+            var item = BaseItem.LibraryManager.GetItemById(id);
+
+            if (item is Series || item is Season)
+            {
+                var itemsToRefresh = BaseItem.LibraryManager.GetItemList(new InternalItemsQuery
+                {
+                    PresentationUniqueKey = item.PresentationUniqueKey,
+                    ExcludeItemIds = new[] { item.InternalId }
+                }).Select(i => i.InternalId);
+
+                foreach (var altId in itemsToRefresh)
+                {
+                    BaseItem.ProviderManager.QueueRefresh(altId, __result, RefreshPriority.Normal, true);
+                }
+            }
         }
     }
 }
