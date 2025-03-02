@@ -115,7 +115,11 @@ namespace StrmAssistant.IntroSkip
 
         private void OnPlaybackStart(object sender, PlaybackProgressEventArgs e)
         {
-            if (!(e.Item is Episode) || !e.PlaybackPositionTicks.HasValue) return;
+            if (!(e.Item is Episode episode) || !e.PlaybackPositionTicks.HasValue || !episode.IndexNumber.HasValue ||
+                !(episode.ParentIndexNumber > 0))
+            {
+                return;
+            }
 
             var options = Plugin.Instance.IntroSkipStore.GetOptions();
 

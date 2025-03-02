@@ -154,18 +154,22 @@ namespace StrmAssistant.Common
                    IsIntroSkipPreferenceSelected(IntroSkipPreference.ResetAndOverwrite);
         }
 
-        public List<BaseItem> FetchEpisodes(BaseItem item, MarkerType markerType)
+        private static BaseItem[] GetEpisodesInSeason(Season season, int? minIndexNumber = null)
         {
-            var episodesInSeasonQuery = new InternalItemsQuery
-            {
-                IncludeItemTypes = new[] { nameof(Episode) },
-                HasPath = true,
-                MediaTypes = new[] { MediaType.Video },
-                ParentIds = new[] { item.ParentId },
-                OrderBy = new (string, SortOrder)[] { (ItemSortBy.IndexNumber, SortOrder.Ascending) }
-            };
-            var episodesInSeason =
-                _libraryManager.GetItemList(episodesInSeasonQuery).ToList();
+            return season.GetEpisodes(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { nameof(Episode) },
+                    HasPath = true,
+                    MediaTypes = new[] { MediaType.Video },
+                    MinIndexNumber = minIndexNumber ?? 1,
+                    OrderBy = new (string, SortOrder)[] { (ItemSortBy.IndexNumber, SortOrder.Ascending) }
+                })
+                .Items;
+        }
+
+        public List<BaseItem> FetchEpisodes(Episode item, MarkerType markerType)
+        {
+            var episodesInSeason = GetEpisodesInSeason(item.Season);
 
             var priorEpisodesWithoutMarkers = episodesInSeason.Where(e => e.IndexNumber < item.IndexNumber)
                 .Where(e =>
@@ -180,11 +184,11 @@ namespace StrmAssistant.Common
                     switch (markerType)
                     {
                         case MarkerType.IntroEnd:
-                            {
-                                var hasIntroStart = chapters.Any(c => c.MarkerType == MarkerType.IntroStart);
-                                var hasIntroEnd = chapters.Any(c => c.MarkerType == MarkerType.IntroEnd);
-                                return !hasIntroStart || !hasIntroEnd;
-                            }
+                        {
+                            var hasIntroStart = chapters.Any(c => c.MarkerType == MarkerType.IntroStart);
+                            var hasIntroEnd = chapters.Any(c => c.MarkerType == MarkerType.IntroEnd);
+                            return !hasIntroStart || !hasIntroEnd;
+                        }
                         case MarkerType.CreditsStart:
                             var hasCredits = chapters.Any(c => c.MarkerType == MarkerType.CreditsStart);
                             return !hasCredits;
@@ -192,6 +196,8 @@ namespace StrmAssistant.Common
 
                     return false;
                 });
+
+            var currentEpisodes = episodesInSeason.Where(e => e.IndexNumber == item.IndexNumber);
 
             var followingEpisodes = episodesInSeason.Where(e => e.IndexNumber > item.IndexNumber)
                 .Where(e =>
@@ -206,13 +212,13 @@ namespace StrmAssistant.Common
                     switch (markerType)
                     {
                         case MarkerType.IntroEnd:
-                            {
-                                var hasIntroStart = chapters.Any(c =>
-                                    c.MarkerType == MarkerType.IntroStart && !AllowOverwrite(c));
-                                var hasIntroEnd = chapters.Any(c =>
-                                    c.MarkerType == MarkerType.IntroEnd && !AllowOverwrite(c));
-                                return !hasIntroStart || !hasIntroEnd;
-                            }
+                        {
+                            var hasIntroStart = chapters.Any(c =>
+                                c.MarkerType == MarkerType.IntroStart && !AllowOverwrite(c));
+                            var hasIntroEnd = chapters.Any(c =>
+                                c.MarkerType == MarkerType.IntroEnd && !AllowOverwrite(c));
+                            return !hasIntroStart || !hasIntroEnd;
+                        }
                         case MarkerType.CreditsStart:
                             var hasCredits = chapters.Any(c =>
                                 c.MarkerType == MarkerType.CreditsStart && !AllowOverwrite(c));
@@ -222,22 +228,13 @@ namespace StrmAssistant.Common
                     return false;
                 });
 
-            var result = priorEpisodesWithoutMarkers.Concat(new[] { item }).Concat(followingEpisodes).ToList();
+            var result = priorEpisodesWithoutMarkers.Concat(currentEpisodes).Concat(followingEpisodes).ToList();
             return result;
         }
 
         public void RemoveSeasonIntroCreditsMarkers(Episode item, SessionInfo session)
         {
-            var episodesInSeasonQuery = new InternalItemsQuery
-            {
-                IncludeItemTypes = new[] { nameof(Episode) },
-                HasPath = true,
-                MediaTypes = new[] { MediaType.Video },
-                ParentIds = new[] { item.ParentId },
-                MinIndexNumber = item.IndexNumber,
-                OrderBy = new (string, SortOrder)[] { (ItemSortBy.IndexNumber, SortOrder.Ascending) }
-            };
-            var episodesInSeason = _libraryManager.GetItemList(episodesInSeasonQuery);
+            var episodesInSeason = GetEpisodesInSeason(item.Season, item.IndexNumber);
 
             foreach (var episode in episodesInSeason)
             {
@@ -306,17 +303,14 @@ namespace StrmAssistant.Common
 
         public bool SeasonHasIntroCredits(Episode item)
         {
-            var query = new InternalItemsQuery
+            if (!item.IndexNumber.HasValue || !(item.ParentIndexNumber > 0))
             {
-                IncludeItemTypes = new[] { nameof(Episode) },
-                HasPath = true,
-                MediaTypes = new[] { MediaType.Video },
-                ParentIds = new[] { item.ParentId }
-            };
+                return false;
+            }
 
-            var allEpisodesInSeason = _libraryManager.GetItemList(query);
+            var episodesInSeason = GetEpisodesInSeason(item.Season);
 
-            var result = allEpisodesInSeason.Any(e =>
+            var result = episodesInSeason.Any(e =>
             {
                 var chapters = _itemRepository.GetChapters(e);
                 var hasIntroMarkers =
@@ -333,29 +327,27 @@ namespace StrmAssistant.Common
 
         public List<Episode> SeasonHasIntroCredits(List<Episode> episodes)
         {
-            var episodesInScope = episodes
-                .Where(e => Plugin.PlaySessionMonitor.IsLibraryInScope(e)).ToList();
+            var episodesInScope = episodes.Where(e => Plugin.PlaySessionMonitor.IsLibraryInScope(e)).ToList();
 
-            var seasonIds = episodesInScope.Select(e => e.ParentId).Distinct().ToArray();
+            var parentIds = episodesInScope.Select(e => e.ParentId).Distinct().ToArray();
 
-            var episodesQuery = new InternalItemsQuery
-            {
-                IncludeItemTypes = new[] { nameof(Episode) },
-                HasPath = true,
-                MediaTypes = new[] { MediaType.Video },
-                ParentIds = seasonIds
-            };
-
-            var groupedBySeason = _libraryManager.GetItemList(episodesQuery)
+            var groupedByParent = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { nameof(Episode) },
+                    HasPath = true,
+                    MediaTypes = new[] { MediaType.Video },
+                    ParentIds = parentIds,
+                    HasIndexNumber = true
+                })
                 .OfType<Episode>()
                 .Where(ep => !episodesInScope.Select(e => e.InternalId).Contains(ep.InternalId))
                 .GroupBy(ep => ep.ParentId);
 
             var resultEpisodes = new List<Episode>();
 
-            foreach (var season in groupedBySeason)
+            foreach (var parent in groupedByParent)
             {
-                var hasMarkers = season.Any(e =>
+                var hasMarkers = parent.Any(e =>
                 {
                     var chapters = _itemRepository.GetChapters(e);
 
@@ -374,7 +366,7 @@ namespace StrmAssistant.Common
 
                 if (hasMarkers)
                 {
-                    var episodesCanMarkers = episodesInScope.Where(e => e.ParentId == season.Key).ToList();
+                    var episodesCanMarkers = episodesInScope.Where(e => e.ParentId == parent.Key).ToList();
                     resultEpisodes.AddRange(episodesCanMarkers);
                 }
             }
@@ -384,33 +376,31 @@ namespace StrmAssistant.Common
 
         public void PopulateIntroCredits(List<Episode> incomingEpisodes)
         {
-            var episodesLatestDataQuery = new InternalItemsQuery
+            var episodes = _libraryManager.GetItemList(new InternalItemsQuery
             {
                 ItemIds = incomingEpisodes.Select(e => e.InternalId).ToArray()
-            };
-            var episodes = _libraryManager.GetItemList(episodesLatestDataQuery);
+            });
 
-            var seasonIds = episodes.Select(e => e.ParentId).Distinct().ToArray();
+            var parentIds = episodes.Select(e => e.ParentId).Distinct().ToArray();
 
-            var episodesQuery = new InternalItemsQuery
-            {
-                IncludeItemTypes = new[] { nameof(Episode) },
-                HasPath = true,
-                MediaTypes = new[] { MediaType.Video },
-                ParentIds = seasonIds
-            };
-
-            var groupedBySeason = _libraryManager.GetItemList(episodesQuery)
+            var groupedByParent = _libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = new[] { nameof(Episode) },
+                    HasPath = true,
+                    MediaTypes = new[] { MediaType.Video },
+                    ParentIds = parentIds,
+                    HasIndexNumber = true
+                })
                 .Where(ep => !episodes.Select(e => e.InternalId).Contains(ep.InternalId))
                 .OfType<Episode>()
                 .GroupBy(ep => ep.ParentId);
 
-            foreach (var season in groupedBySeason)
+            foreach (var parent in groupedByParent)
             {
                 Episode lastIntroEpisode = null;
                 Episode lastCreditsEpisode = null;
 
-                foreach (var episode in season.Reverse())
+                foreach (var episode in parent.Reverse())
                 {
                     var chapters = _itemRepository.GetChapters(episode);
 
@@ -445,7 +435,7 @@ namespace StrmAssistant.Common
 
                     if (introStart != null && introEnd != null)
                     {
-                        foreach (var episode in episodes.Where(e => e.ParentId == season.Key))
+                        foreach (var episode in episodes.Where(e => e.ParentId == parent.Key && e.IndexNumber.HasValue))
                         {
                             var chapters = _itemRepository.GetChapters(episode);
                             chapters.Add(introStart);
@@ -457,7 +447,7 @@ namespace StrmAssistant.Common
                     }
                 }
 
-                if (lastCreditsEpisode != null && lastCreditsEpisode.RunTimeTicks.HasValue)
+                if (lastCreditsEpisode?.RunTimeTicks != null)
                 {
                     var lastEpisodeChapters = _itemRepository.GetChapters(lastCreditsEpisode);
                     var lastEpisodeCreditsStart = lastEpisodeChapters.FirstOrDefault(c => c.MarkerType == MarkerType.CreditsStart);
@@ -467,7 +457,8 @@ namespace StrmAssistant.Common
                         var creditsDurationTicks = lastCreditsEpisode.RunTimeTicks.Value - lastEpisodeCreditsStart.StartPositionTicks;
                         if (creditsDurationTicks > 0)
                         {
-                            foreach (var episode in episodes.Where(e => e.ParentId == season.Key))
+                            foreach (var episode in episodes.Where(e =>
+                                         e.ParentId == parent.Key && e.IndexNumber.HasValue))
                             {
                                 if (episode.RunTimeTicks.HasValue)
                                 {
