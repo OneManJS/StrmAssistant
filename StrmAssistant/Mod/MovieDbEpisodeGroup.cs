@@ -44,7 +44,8 @@ namespace StrmAssistant.Mod
         private static MethodInfo _episodeGetImages;
         private static MethodInfo _canRefreshMetadata;
 
-        private static AsyncLocal<Series> CurrentSeries { get; } = new AsyncLocal<Series>();
+        private static readonly AsyncLocal<Series> CurrentSeries = new AsyncLocal<Series>();
+        private static readonly AsyncLocal<bool> EnableEpisodeGroupScraping = new AsyncLocal<bool>();
 
         public const string LocalEpisodeGroupFileName = "episodegroup.json";
 
@@ -117,126 +118,155 @@ namespace StrmAssistant.Mod
 
             if (item.Parent is null && item.ExtraType is null) return;
 
-            if (provider is IRemoteMetadataProvider && provider.Name == "TheMovieDb" &&
-                Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup)
+            if (provider is IRemoteMetadataProvider && provider.Name == "TheMovieDb")
             {
                 var providerName = provider.GetType().FullName;
+                Series series = null;
 
                 if (item is Episode episode && providerName == "MovieDb.MovieDbEpisodeProvider")
                 {
-                    CurrentSeries.Value = episode.Series;
+                    series = episode.Series;
                 }
                 else if (item is Season season && providerName == "MovieDb.MovieDbSeasonProvider")
                 {
-                    CurrentSeries.Value = season.Series;
+                    series = season.Series;
                 }
-                else if (item is Series series && providerName == "MovieDb.MovieDbSeriesProvider")
+                else if (item is Series self && providerName == "MovieDb.MovieDbSeriesProvider")
+                {
+                    series = self;
+                }
+
+                if (series != null)
                 {
                     CurrentSeries.Value = series;
+                    EnableEpisodeGroupScraping.Value =
+                        series.ProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out _) &&
+                        series.ProviderIds.TryGetValue(MovieDbEpisodeGroupExternalId.StaticName, out _);
                 }
             }
         }
 
         [HarmonyPrefix]
-        private static bool SeriesGetMetadataPrefix(SeriesInfo info, CancellationToken cancellationToken,
+        private static void SeriesGetMetadataPrefix(SeriesInfo info, CancellationToken cancellationToken,
             Task<MetadataResult<Series>> __result, out string __state)
         {
             __state = null;
+            var series = CurrentSeries.Value;
+            CurrentSeries.Value = null;
 
             if (Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup &&
-                CurrentSeries.Value?.ContainingFolderPath != null)
+                series?.ContainingFolderPath != null)
             {
-                var series = CurrentSeries.Value;
-                CurrentSeries.Value = null;
-
                 var localEpisodeGroupPath = Path.Combine(series.ContainingFolderPath, LocalEpisodeGroupFileName);
                 var episodeGroupInfo = Task.Run(
                     () => Plugin.MetadataApi.FetchLocalEpisodeGroup(localEpisodeGroupPath),
                     cancellationToken).Result;
 
-                if (episodeGroupInfo != null && !string.IsNullOrEmpty(episodeGroupInfo.id))
+                if (episodeGroupInfo != null && !string.IsNullOrEmpty(episodeGroupInfo.id) &&
+                    series.ProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out _))
                 {
                     __state = episodeGroupInfo.id;
+                    EnableEpisodeGroupScraping.Value = true;
                 }
             }
-
-            return true;
         }
 
         [HarmonyPostfix]
         private static void SeriesGetMetadataPostfix(SeriesInfo info, CancellationToken cancellationToken,
             Task<MetadataResult<Series>> __result, string __state)
         {
-            var metadataResult = __result.Result;
+            if (!EnableEpisodeGroupScraping.Value || __state is null) return;
 
-            if (metadataResult.HasMetadata && metadataResult.Item != null && __state != null)
+            MetadataResult<Series> metadataResult = null;
+
+            try
+            {
+                metadataResult = __result?.Result;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            if (metadataResult != null && metadataResult.HasMetadata && metadataResult.Item != null)
             {
                 metadataResult.Item.SetProviderId(MovieDbEpisodeGroupExternalId.StaticName, __state);
             }
         }
 
         [HarmonyPrefix]
-        private static bool SeasonGetMetadataPrefix(RemoteMetadataFetchOptions<SeasonInfo> options,
+        private static void SeasonGetMetadataPrefix(RemoteMetadataFetchOptions<SeasonInfo> options,
             CancellationToken cancellationToken, Task<MetadataResult<Season>> __result, out SeasonGroupName __state)
         {
             __state = null;
+            var series = CurrentSeries.Value;
+            CurrentSeries.Value = null;
 
-            var season = options.SearchInfo;
-            season.SeriesProviderIds.TryGetValue(MovieDbEpisodeGroupExternalId.StaticName, out var episodeGroupId);
-            episodeGroupId = episodeGroupId?.Trim();
-            EpisodeGroupResponse episodeGroupInfo = null;
-            string localEpisodeGroupPath = null;
-
-            if (Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup &&
-                CurrentSeries.Value?.ContainingFolderPath != null)
+            if (EnableEpisodeGroupScraping.Value)
             {
-                var series = CurrentSeries.Value;
-                CurrentSeries.Value = null;
+                var season = options.SearchInfo;
+                season.SeriesProviderIds.TryGetValue(MovieDbEpisodeGroupExternalId.StaticName, out var episodeGroupId);
+                episodeGroupId = episodeGroupId?.Trim();
+                EpisodeGroupResponse episodeGroupInfo = null;
+                string localEpisodeGroupPath = null;
 
-                localEpisodeGroupPath = Path.Combine(series.ContainingFolderPath, LocalEpisodeGroupFileName);
-                episodeGroupInfo = Task.Run(() => Plugin.MetadataApi.FetchLocalEpisodeGroup(localEpisodeGroupPath),
-                    cancellationToken).Result;
-
-                if (episodeGroupInfo != null && !string.IsNullOrEmpty(episodeGroupInfo.id) &&
-                    string.IsNullOrEmpty(episodeGroupId))
+                if (Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup &&
+                    series?.ContainingFolderPath != null)
                 {
-                    series.SetProviderId(MovieDbEpisodeGroupExternalId.StaticName, episodeGroupInfo.id);
+                    localEpisodeGroupPath = Path.Combine(series.ContainingFolderPath, LocalEpisodeGroupFileName);
+                    episodeGroupInfo = Task.Run(() => Plugin.MetadataApi.FetchLocalEpisodeGroup(localEpisodeGroupPath),
+                        cancellationToken).Result;
+
+                    if (episodeGroupInfo != null && !string.IsNullOrEmpty(episodeGroupInfo.id) &&
+                        string.IsNullOrEmpty(episodeGroupId))
+                    {
+                        series.SetProviderId(MovieDbEpisodeGroupExternalId.StaticName, episodeGroupInfo.id);
+                    }
+                }
+
+                if (episodeGroupInfo is null && season.IndexNumber.HasValue && season.IndexNumber > 0 &&
+                    season.SeriesProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out var seriesTmdbId) &&
+                    !string.IsNullOrEmpty(episodeGroupId))
+                {
+                    episodeGroupInfo = Task
+                        .Run(
+                            () => Plugin.MetadataApi.FetchOnlineEpisodeGroup(seriesTmdbId, episodeGroupId,
+                                season.MetadataLanguage, localEpisodeGroupPath, cancellationToken), cancellationToken)
+                        .Result;
+                }
+
+                var matchingSeason = episodeGroupInfo?.groups.FirstOrDefault(g => g.order == season.IndexNumber);
+
+                if (matchingSeason != null)
+                {
+                    __state = new SeasonGroupName
+                    {
+                        LookupSeasonNumber = season.IndexNumber,
+                        LookupLanguage = season.MetadataLanguage,
+                        GroupName = matchingSeason.name
+                    };
                 }
             }
-
-            if (episodeGroupInfo is null && season.IndexNumber.HasValue && season.IndexNumber > 0 &&
-                season.SeriesProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out var seriesTmdbId) &&
-                !string.IsNullOrEmpty(episodeGroupId))
-            {
-                episodeGroupInfo = Task
-                    .Run(
-                        () => Plugin.MetadataApi.FetchOnlineEpisodeGroup(seriesTmdbId, episodeGroupId,
-                            season.MetadataLanguage, localEpisodeGroupPath, cancellationToken), cancellationToken)
-                    .Result;
-            }
-
-            var matchingSeason = episodeGroupInfo?.groups.FirstOrDefault(g => g.order == season.IndexNumber);
-
-            if (matchingSeason != null)
-            {
-                __state = new SeasonGroupName
-                {
-                    LookupSeasonNumber = season.IndexNumber,
-                    LookupLanguage = season.MetadataLanguage,
-                    GroupName = matchingSeason.name
-                };
-            }
-
-            return true;
         }
 
         [HarmonyPostfix]
         private static void SeasonGetMetadataPostfix(RemoteMetadataFetchOptions<SeasonInfo> options,
             CancellationToken cancellationToken, Task<MetadataResult<Season>> __result, SeasonGroupName __state)
         {
-            var metadataResult = __result.Result;
+            if (!EnableEpisodeGroupScraping.Value || __state is null) return;
+
+            MetadataResult<Season> metadataResult = null;
+
+            try
+            {
+                metadataResult = __result?.Result;
+            }
+            catch
+            {
+                // ignored
+            }
             
-            if (__state is null) return;
+            if (metadataResult is null) return;
 
             var isZh = __state.LookupLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
             var isJapaneseFallback = Plugin.Instance.MetadataEnhanceStore.GetOptions().ChineseMovieDb &&
@@ -260,71 +290,86 @@ namespace StrmAssistant.Mod
         }
 
         [HarmonyPrefix]
-        private static bool EpisodeGetMetadataPrefix(RemoteMetadataFetchOptions<EpisodeInfo> options,
-            CancellationToken cancellationToken, Task<MetadataResult<Episode>> __result, out SeasonEpisodeMapping __state)
+        private static void EpisodeGetMetadataPrefix(RemoteMetadataFetchOptions<EpisodeInfo> options,
+            CancellationToken cancellationToken, Task<MetadataResult<Episode>> __result,
+            out SeasonEpisodeMapping __state)
         {
             __state = null;
+            var series = CurrentSeries.Value;
+            CurrentSeries.Value = null;
 
-            var episode = options.SearchInfo;
-            string localEpisodeGroupPath = null;
-            Series series = null;
-
-            if (Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup &&
-                CurrentSeries.Value?.ContainingFolderPath != null)
+            if (EnableEpisodeGroupScraping.Value)
             {
-                series = CurrentSeries.Value;
-                CurrentSeries.Value = null;
+                var episode = options.SearchInfo;
+                string localEpisodeGroupPath = null;
 
-                localEpisodeGroupPath = Path.Combine(series.ContainingFolderPath, LocalEpisodeGroupFileName);
-            }
-
-            if (episode.SeriesProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out var seriesTmdbId))
-            {
-                episode.SeriesProviderIds.TryGetValue(MovieDbEpisodeGroupExternalId.StaticName, out var episodeGroupId);
-                episodeGroupId = episodeGroupId?.Trim();
-
-                var matchingEpisode =
-                    Task.Run(
-                            () => MapSeasonEpisode(seriesTmdbId, episodeGroupId, episode.MetadataLanguage,
-                                episode.ParentIndexNumber, episode.IndexNumber, localEpisodeGroupPath,
-                                cancellationToken),
-                            cancellationToken)
-                        .Result;
-
-                if (matchingEpisode != null)
+                if (Plugin.Instance.MetadataEnhanceStore.GetOptions().LocalEpisodeGroup &&
+                    series?.ContainingFolderPath != null)
                 {
-                    __state = matchingEpisode;
-                    episode.ParentIndexNumber = matchingEpisode.MappedSeasonNumber;
-                    episode.IndexNumber = matchingEpisode.MappedEpisodeNumber;
+                    localEpisodeGroupPath = Path.Combine(series.ContainingFolderPath, LocalEpisodeGroupFileName);
+                }
 
-                    if (series != null && string.IsNullOrEmpty(episodeGroupId) &&
-                        !string.IsNullOrEmpty(matchingEpisode.EpisodeGroupId))
+                if (episode.SeriesProviderIds.TryGetValue(MetadataProviders.Tmdb.ToString(), out var seriesTmdbId))
+                {
+                    episode.SeriesProviderIds.TryGetValue(MovieDbEpisodeGroupExternalId.StaticName,
+                        out var episodeGroupId);
+                    episodeGroupId = episodeGroupId?.Trim();
+
+                    var matchingEpisode =
+                        Task.Run(
+                                () => MapSeasonEpisode(seriesTmdbId, episodeGroupId, episode.MetadataLanguage,
+                                    episode.ParentIndexNumber, episode.IndexNumber, localEpisodeGroupPath,
+                                    cancellationToken),
+                                cancellationToken)
+                            .Result;
+
+                    if (matchingEpisode != null)
                     {
-                        series.SetProviderId(MovieDbEpisodeGroupExternalId.StaticName, matchingEpisode.EpisodeGroupId);
+                        __state = matchingEpisode;
+                        episode.ParentIndexNumber = matchingEpisode.MappedSeasonNumber;
+                        episode.IndexNumber = matchingEpisode.MappedEpisodeNumber;
+
+                        if (series != null && string.IsNullOrEmpty(episodeGroupId) &&
+                            !string.IsNullOrEmpty(matchingEpisode.EpisodeGroupId))
+                        {
+                            series.SetProviderId(MovieDbEpisodeGroupExternalId.StaticName,
+                                matchingEpisode.EpisodeGroupId);
+                        }
                     }
                 }
             }
-
-            return true;
         }
 
         [HarmonyPostfix]
         private static void EpisodeGetMetadataPostfix(RemoteMetadataFetchOptions<EpisodeInfo> options,
             CancellationToken cancellationToken, Task<MetadataResult<Episode>> __result, SeasonEpisodeMapping __state)
         {
-            var metadataResult = __result.Result;
+            if (!EnableEpisodeGroupScraping.Value || __state is null) return;
 
-            if (!metadataResult.HasMetadata || metadataResult.Item is null || __state is null) return;
+            MetadataResult<Episode> metadataResult = null;
+
+            try
+            {
+                metadataResult = __result?.Result;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            if (metadataResult is null || !metadataResult.HasMetadata || metadataResult.Item is null) return;
 
             metadataResult.Item.ParentIndexNumber = __state.LookupSeasonNumber;
             metadataResult.Item.IndexNumber = __state.LookupEpisodeNumber;
         }
 
         [HarmonyPrefix]
-        private static bool EpisodeGetImagesPrefix(RemoteImageFetchOptions options, CancellationToken cancellationToken,
+        private static void EpisodeGetImagesPrefix(RemoteImageFetchOptions options, CancellationToken cancellationToken,
             Task<IEnumerable<RemoteImageInfo>> __result, out SeasonEpisodeMapping __state)
         {
             __state = null;
+
+            if (!EnableEpisodeGroupScraping.Value) return;
 
             if (options.Item is Episode episode)
             {
@@ -348,15 +393,16 @@ namespace StrmAssistant.Mod
                     }
                 }
             }
-
-            return true;
         }
 
         [HarmonyPostfix]
         private static void EpisodeGetImagesPostfix(RemoteImageFetchOptions options,
-            CancellationToken cancellationToken, Task<IEnumerable<RemoteImageInfo>> __result, SeasonEpisodeMapping __state)
+            CancellationToken cancellationToken, Task<IEnumerable<RemoteImageInfo>> __result,
+            SeasonEpisodeMapping __state)
         {
-            if (options.Item is Episode episode && __state != null)
+            if (!EnableEpisodeGroupScraping.Value || __state is null) return;
+
+            if (options.Item is Episode episode)
             {
                 episode.ParentIndexNumber = __state.LookupSeasonNumber;
                 episode.IndexNumber = __state.LookupEpisodeNumber;
