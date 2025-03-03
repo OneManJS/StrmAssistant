@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
 using System.Collections.Generic;
 using System.Reflection;
@@ -12,6 +13,7 @@ namespace StrmAssistant.Mod
     {
         private static MethodInfo _saveChapters;
         private static MethodInfo _deleteChapters;
+        private static MethodInfo _onFailedToFindIntro;
 
         private static readonly AsyncLocal<long> BypassItem = new AsyncLocal<long>();
 
@@ -35,6 +37,11 @@ namespace StrmAssistant.Mod
                 new[] { typeof(long), typeof(bool), typeof(List<ChapterInfo>) }, null);
             _deleteChapters =
                 sqliteItemRepository.GetMethod("DeleteChapters", BindingFlags.Instance | BindingFlags.Public);
+
+            var embyProviders = Assembly.Load("Emby.Providers");
+            var audioFingerprintManager = embyProviders.GetType("Emby.Providers.Markers.AudioFingerprintManager");
+            _onFailedToFindIntro = audioFingerprintManager.GetMethod("OnFailedToFindIntro",
+                BindingFlags.NonPublic | BindingFlags.Static);
         }
 
         protected override void Prepare(bool apply)
@@ -43,6 +50,7 @@ namespace StrmAssistant.Mod
             {
                 PatchUnpatch(PatchTracker, apply, _saveChapters, postfix: nameof(SaveChaptersPostfix));
                 //PatchUnpatch(PatchTracker, apply, _deleteChapters, postfix: nameof(DeleteChaptersPostfix));
+                PatchUnpatch(PatchTracker, apply, _onFailedToFindIntro, postfix: nameof(OnFailedToFindIntroPostfix));
             }
         }
 
@@ -68,6 +76,16 @@ namespace StrmAssistant.Mod
             if (BypassItem.Value != 0 && BypassItem.Value == itemId) return;
 
             _ = Plugin.MediaInfoApi.SerializeMediaInfo(itemId, true, "Delete Chapters", CancellationToken.None);
+        }
+
+        [HarmonyPostfix]
+        private static void OnFailedToFindIntroPostfix(Episode episode, bool __runOriginal)
+        {
+            if (__runOriginal)
+            {
+                _ = Plugin.MediaInfoApi.SerializeMediaInfo(episode.InternalId, true, "Zero Fingerprint Confidence",
+                    CancellationToken.None);
+            }
         }
     }
 }
