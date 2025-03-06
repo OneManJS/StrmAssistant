@@ -25,7 +25,6 @@ namespace StrmAssistant.Common
     {
         private readonly ILogger _logger;
         private readonly ILibraryManager _libraryManager;
-        private readonly IItemRepository _itemRepository;
 
         private static readonly PatchTracker PatchTracker = new PatchTracker(typeof(VideoThumbnailApi),
             Plugin.Instance.IsModSupported ? PatchApproach.Harmony : PatchApproach.Reflection);
@@ -43,7 +42,6 @@ namespace StrmAssistant.Common
         {
             _logger = Plugin.Instance.Logger;
             _libraryManager = libraryManager;
-            _itemRepository = itemRepository;
 
             try
             {
@@ -149,43 +147,45 @@ namespace StrmAssistant.Common
             var includeExtra = Plugin.Instance.MediaInfoExtractStore.GetOptions().IncludeExtra;
             _logger.Info("Include Extra: " + includeExtra);
 
+            var libraryPathsInScope = libraries.SelectMany(l => l.Locations).Select(ls =>
+                ls.EndsWith(Path.DirectorySeparatorChar.ToString())
+                    ? ls
+                    : ls + Path.DirectorySeparatorChar).ToArray();
+
             var favoritesWithExtra = Array.Empty<BaseItem>();
-            if (libraryIds.Contains("-1"))
+
+            if (libraryIds.Contains("-1") && libraryPathsInScope.Any())
             {
                 var favorites = LibraryApi.AllUsers.Select(e => e.Key)
                     .SelectMany(user => _libraryManager.GetItemList(new InternalItemsQuery
                     {
                         User = user,
-                        IsFavorite = true
+                        IsFavorite = true,
+                        PathStartsWithAny = libraryPathsInScope
                     })).GroupBy(i => i.InternalId).Select(g => g.First()).ToList();
 
-                var expanded = Plugin.LibraryApi.ExpandFavorites(favorites, false, true);
+                var expanded = Plugin.LibraryApi.ExpandFavorites(favorites, false, false, false);
 
-                favoritesWithExtra = expanded.Concat(includeExtra
+                favoritesWithExtra = expanded
+                    .Concat(includeExtra
                         ? expanded.SelectMany(f => f.GetExtras(LibraryApi.IncludeExtraTypes))
                         : Enumerable.Empty<BaseItem>())
+                    .Where(i => Plugin.LibraryApi.HasMediaInfo(i) && !i.HasImage(ImageType.Chapter))
                     .ToArray();
             }
 
             var items = Array.Empty<BaseItem>();
             var extras = Array.Empty<BaseItem>();
 
-            if (!libraryIds.Any() || libraryIds.Any(id => id != "-1"))
+            if (libraryIds.Any(id => id != "-1") && libraryPathsInScope.Any())
             {
                 var videoThumbnailQuery = new InternalItemsQuery
                 {
                     MediaTypes = new[] { MediaType.Video },
                     HasAudioStream = true,
-                    HasChapterImages = false
+                    HasChapterImages = false,
+                    PathStartsWithAny = libraryPathsInScope
                 };
-
-                if (libraryIds.Any(id => id != "-1") && libraries.Any())
-                {
-                    videoThumbnailQuery.PathStartsWithAny = libraries.SelectMany(l => l.Locations).Select(ls =>
-                        ls.EndsWith(Path.DirectorySeparatorChar.ToString())
-                            ? ls
-                            : ls + Path.DirectorySeparatorChar).ToArray();
-                }
 
                 items = _libraryManager.GetItemList(videoThumbnailQuery);
 

@@ -239,12 +239,13 @@ namespace StrmAssistant.Common
 
             var includeFavorites = libraryIds == null || !libraryIds.Any() || libraryIds.Contains("-1");
             var includeExtra = Plugin.Instance.MediaInfoExtractStore.GetOptions().IncludeExtra;
+            var enableImageCapture = Plugin.Instance.MediaInfoExtractStore.GetOptions().EnableImageCapture;
 
             var resultItems = new List<BaseItem>();
 
             if (IsCatchupTaskSelected(GeneralOptions.CatchupTask.MediaInfo))
             {
-                if (includeFavorites) resultItems = ExpandFavorites(items, true, true);
+                if (includeFavorites) resultItems = ExpandFavorites(items, true, true, enableImageCapture);
 
                 var incomingItems = items.Where(item => item is Video || item is Audio).ToList();
 
@@ -304,7 +305,7 @@ namespace StrmAssistant.Common
                         IsFavorite = true
                     })).GroupBy(i => i.InternalId).Select(g => g.First()).ToList();
 
-                var expanded = ExpandFavorites(favorites, false, true);
+                var expanded = ExpandFavorites(favorites, false, true, enableImageCapture);
 
                 favoritesWithExtra = expanded.Concat(includeExtra
                         ? expanded.SelectMany(f => f.GetExtras(IncludeExtraTypes))
@@ -412,7 +413,7 @@ namespace StrmAssistant.Common
                     .Select(g => g.First())
                     .ToList();
 
-                var expanded = ExpandFavorites(favorites, false, false);
+                var expanded = ExpandFavorites(favorites, false, false, false);
 
                 favoritesWithExtra = expanded.Concat(includeExtra
                         ? expanded.SelectMany(f => f.GetExtras(IncludeExtraTypes))
@@ -505,10 +506,9 @@ namespace StrmAssistant.Common
                    enableImageCapture && !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item);
         }
 
-        public List<BaseItem> ExpandFavorites(List<BaseItem> items, bool filterNeeded, bool? preExtract)
+        public List<BaseItem> ExpandFavorites(List<BaseItem> items, bool filterNeeded, bool? preExtract,
+            bool enableImageCapture)
         {
-            var enableImageCapture = Plugin.Instance.MediaInfoExtractStore.GetOptions().EnableImageCapture;
-
             var itemsMultiVersions = items.SelectMany(v =>
                     _libraryManager.GetItemList(new InternalItemsQuery
                     {
@@ -534,7 +534,7 @@ namespace StrmAssistant.Common
                 };
                 var episodesMediaInfo = _libraryManager.GetItemList(episodesMediaInfoQuery);
 
-                if (enableImageCapture && preExtract == true)
+                if (enableImageCapture)
                 {
                     var episodesImageCaptureQuery = new InternalItemsQuery
                     {

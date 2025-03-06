@@ -262,7 +262,7 @@ namespace StrmAssistant.Common
                 .Select(g => g.First())
                 .ToList();
 
-            var expanded = Plugin.LibraryApi.ExpandFavorites(favorites, false, null).OfType<Episode>();
+            var expanded = Plugin.LibraryApi.ExpandFavorites(favorites, false, null, false).OfType<Episode>();
 
             var result = expanded.GroupBy(e => e.ParentId).Select(g => g.Key).ToArray();
 
@@ -286,7 +286,8 @@ namespace StrmAssistant.Common
             {
                 if (includeFavorites)
                 {
-                    resultItems = Plugin.LibraryApi.ExpandFavorites(items, true, null).OfType<Episode>().ToList();
+                    resultItems = Plugin.LibraryApi.ExpandFavorites(items, true, null, false).OfType<Episode>()
+                        .ToList();
                 }
 
                 if (libraryIds is null || !libraryIds.Any() || libraryIds.Any(id => id != "-1"))
