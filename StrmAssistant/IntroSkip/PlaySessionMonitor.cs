@@ -351,11 +351,7 @@ namespace StrmAssistant.IntroSkip
 
         public bool IsLibraryInScope(BaseItem item)
         {
-            if (string.IsNullOrEmpty(item.ContainingFolderPath)) return false;
-
-            var isLibraryInScope = LibraryPathsInScope.Any(l => item.ContainingFolderPath.StartsWith(l));
-
-            return isLibraryInScope;
+            return !string.IsNullOrEmpty(item.Path) && LibraryPathsInScope.Any(l => item.Path.StartsWith(l));
         }
 
         public bool IsUserInScope(long userInternalId)
