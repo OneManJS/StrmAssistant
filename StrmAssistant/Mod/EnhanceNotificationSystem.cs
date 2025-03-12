@@ -16,9 +16,11 @@ namespace StrmAssistant.Mod
     {
         private static MethodInfo _convertToGroups;
         private static MethodInfo _sendNotification;
+        private static MethodInfo _queueNotification;
 
         private static readonly AsyncLocal<Dictionary<long, List<(int? IndexNumber, int? ParentIndexNumber)>>>
             GroupDetails = new AsyncLocal<Dictionary<long, List<(int? IndexNumber, int? ParentIndexNumber)>>>();
+        private static readonly AsyncLocal<string> Description = new AsyncLocal<string>();
 
         public EnhanceNotificationSystem()
         {
@@ -40,12 +42,17 @@ namespace StrmAssistant.Mod
                 BindingFlags.NonPublic | BindingFlags.Instance, null,
                 new[] { typeof(INotifier), typeof(NotificationInfo[]), typeof(NotificationRequest), typeof(bool) },
                 null);
+            var notificationQueueManager = notificationsAssembly.GetType("Emby.Notifications.NotificationQueueManager");
+            _queueNotification = notificationQueueManager.GetMethod("QueueNotification",
+                BindingFlags.Instance | BindingFlags.Public, null,
+                new[] { typeof(INotifier), typeof(InternalNotificationRequest), typeof(int) }, null);
         }
 
         protected override void Prepare(bool apply)
         {
             PatchUnpatch(PatchTracker, apply, _convertToGroups, postfix: nameof(ConvertToGroupsPostfix));
             PatchUnpatch(PatchTracker, apply, _sendNotification, prefix: nameof(SendNotificationPrefix));
+            PatchUnpatch(PatchTracker, apply, _queueNotification, prefix: nameof(QueueNotificationPrefix));
         }
 
         [HarmonyPostfix]
@@ -61,7 +68,7 @@ namespace StrmAssistant.Mod
         }
 
         [HarmonyPrefix]
-        private static bool SendNotificationPrefix(INotifier notifier, NotificationInfo[] notifications,
+        private static void SendNotificationPrefix(INotifier notifier, NotificationInfo[] notifications,
             NotificationRequest request, bool enableUserDataInDto)
         {
             if (notifications.FirstOrDefault()?.GroupItems is true
@@ -116,15 +123,23 @@ namespace StrmAssistant.Mod
 
                 var tmdbId = series.GetProviderId(MetadataProviders.Tmdb);
 
-                request.Description = summary;
-
                 if (!string.IsNullOrEmpty(tmdbId))
                 {
-                    request.Description += $"{Environment.NewLine}{Environment.NewLine}TmdbId: {tmdbId}";
+                    summary += $"{Environment.NewLine}{Environment.NewLine}TmdbId: {tmdbId}";
                 }
-            }
 
-            return true;
+                Description.Value = summary;
+            }
+        }
+
+        [HarmonyPrefix]
+        private static void QueueNotificationPrefix(INotifier sender, InternalNotificationRequest request, int priority)
+        {
+            if (!string.IsNullOrEmpty(Description.Value))
+            {
+                request.Description = Description.Value;
+                Description.Value = null;
+            }
         }
     }
 }
