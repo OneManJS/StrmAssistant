@@ -10,6 +10,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Serialization;
 using StrmAssistant.Mod;
 using System;
@@ -249,6 +250,13 @@ namespace StrmAssistant.Common
                                 jsonItem.MediaSourceInfo.ItemId = null;
                                 jsonItem.MediaSourceInfo.Path = null;
 
+                                foreach (var subtitle in jsonItem.MediaSourceInfo.MediaStreams.Where(m =>
+                                             m.IsExternal && m.Type == MediaStreamType.Subtitle &&
+                                             m.Protocol == MediaProtocol.File))
+                                {
+                                    subtitle.Path = _fileSystem.GetFileInfo(subtitle.Path).Name;
+                                }
+
                                 foreach (var chapter in jsonItem.Chapters)
                                 {
                                     chapter.ImageTag = null;
@@ -327,6 +335,14 @@ namespace StrmAssistant.Common
                     if (mediaSourceWithChapters.MediaSourceInfo.RunTimeTicks.HasValue &&
                         !Plugin.LibraryApi.HasFileChanged(item, directoryService))
                     {
+                        foreach (var subtitle in mediaSourceWithChapters.MediaSourceInfo.MediaStreams.Where(m =>
+                                     m.IsExternal && m.Type == MediaStreamType.Subtitle &&
+                                     m.Protocol == MediaProtocol.File))
+                        {
+                            subtitle.Path = Path.Combine(workItem.ContainingFolderPath,
+                                _fileSystem.GetFileInfo(subtitle.Path).Name);
+                        }
+
                         _itemRepository.SaveMediaStreams(item.InternalId,
                             mediaSourceWithChapters.MediaSourceInfo.MediaStreams, CancellationToken.None);
 
