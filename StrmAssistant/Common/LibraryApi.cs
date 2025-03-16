@@ -451,15 +451,42 @@ namespace StrmAssistant.Common
             return results;
         }
 
-        public List<BaseItem> OrderByDescending(List<BaseItem> items)
+        private static List<BaseItem> OrderByDescending(List<BaseItem> items)
         {
-            var results = items.OrderBy(i => i.ExtraType == null ? 0 : 1)
+            var results = items.OrderBy(i => i.ExtraType is null ? 0 : 1)
                 .ThenByDescending(i =>
-                    i is Episode e && e.PremiereDate == DateTimeOffset.MinValue ? e.Series.PremiereDate :
-                    i.ExtraType != null ? i.DateCreated : i.PremiereDate)
-                .ThenByDescending(i => i.IndexNumber)
+                    i is Episode e ? GetPremiereDateOrDefault(e) :
+                    i.ExtraType != null ? i.DateCreated : i.PremiereDate ?? i.DateCreated)
+                .ThenByDescending(i => i.IndexNumber ?? int.MinValue)
                 .ToList();
             return results;
+        }
+
+        private static DateTimeOffset GetPremiereDateOrDefault(Episode item)
+        {
+            if (item.PremiereDate.HasValue && item.PremiereDate.Value != DateTimeOffset.MinValue)
+                return item.PremiereDate.Value;
+
+            if (item.Series.PremiereDate.HasValue && item.Series.PremiereDate.Value != DateTimeOffset.MinValue)
+                return item.Series.PremiereDate.Value;
+
+            if (item.Series.ProductionYear.HasValue)
+                return new DateTimeOffset(new DateTime(item.Series.ProductionYear.Value, 1, 1));
+
+            return item.DateCreated;
+        }
+
+        public static bool IsPremiereDateInScope(Episode item, DateTimeOffset lookBackTime, bool includeNoPrem)
+        {
+            if (item.PremiereDate.HasValue && item.PremiereDate.Value != DateTimeOffset.MinValue)
+                return item.PremiereDate.Value > lookBackTime;
+
+            if (item.Series.PremiereDate.HasValue && item.Series.PremiereDate.Value != DateTimeOffset.MinValue)
+                return item.Series.PremiereDate.Value > lookBackTime;
+
+            if (item.Series.ProductionYear.HasValue) return item.Series.ProductionYear.Value == lookBackTime.Year;
+
+            return includeNoPrem;
         }
 
         private List<BaseItem> FilterUnprocessed(List<BaseItem> items)
@@ -982,12 +1009,10 @@ namespace StrmAssistant.Common
                     IncludeItemTypes = new[] { nameof(Episode) }, HasIndexNumber = true, IsLocked = false
                 })
                 .OfType<Episode>()
-                .Where(e =>
-                    (string.IsNullOrWhiteSpace(e.Overview) || !e.HasImage(ImageType.Primary)) && e.PremiereDate.HasValue
-                        ? e.PremiereDate > lookBackTime
-                        : e.Series.PremiereDate > lookBackTime &&
-                          e.DateLastRefreshed < DateTimeOffset.UtcNow.AddHours(-6))
-                .OrderByDescending(e => e.PremiereDate ?? e.Series.PremiereDate)
+                .Where(e => (string.IsNullOrWhiteSpace(e.Overview) || !e.HasImage(ImageType.Primary)) &&
+                            IsPremiereDateInScope(e, lookBackTime, true) && e.Series.ProviderIds.Count > 0 &&
+                            e.DateLastRefreshed < DateTimeOffset.UtcNow.AddHours(-6))
+                .OrderByDescending(GetPremiereDateOrDefault)
                 .ToList();
 
             _logger.Info("EpisodeRefresh - Number of items: " + itemsToRefresh.Count);
@@ -997,26 +1022,31 @@ namespace StrmAssistant.Common
 
         public List<Episode> FetchEpisodeRefreshQueueItems(List<Episode> items)
         {
-            var itemsToRefresh = new List<Episode>();
+            const int lookBackDays = 90;
+            _logger.Info("EpisodeRefresh - Look back days: " + lookBackDays);
+
+            var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
+
             var groupedBySeason = items.GroupBy(i => i.Season);
-            var excludeItemIds = items.Select(e => e.InternalId).ToHashSet();
+            var itemsToRefresh = new List<Episode>();
 
             foreach (var group in groupedBySeason)
             {
                 var season = group.Key;
 
-                var episodes = season.GetEpisodes(new InternalItemsQuery
+                var episodes = season
+                    .GetEpisodes(new InternalItemsQuery
                     {
+                        ExcludeItemIds = group.Select(e => e.InternalId).ToArray(),
                         IncludeItemTypes = new[] { nameof(Episode) },
                         HasIndexNumber = true,
                         IsLocked = false,
-                        MinPremiereDate = DateTimeOffset.UtcNow.AddDays(-90),
                         OrderBy = new (string, SortOrder)[] { (ItemSortBy.IndexNumber, SortOrder.Ascending) }
                     })
                     .Items.OfType<Episode>()
-                    .Where(e => !excludeItemIds.Contains(e.InternalId) &&
-                                e.DateLastRefreshed < DateTimeOffset.UtcNow.AddHours(-6) &&
-                                (string.IsNullOrWhiteSpace(e.Overview) || !e.HasImage(ImageType.Primary)));
+                    .Where(e => (string.IsNullOrWhiteSpace(e.Overview) || !e.HasImage(ImageType.Primary)) &&
+                                IsPremiereDateInScope(e, lookBackTime, false) && e.Series.ProviderIds.Count > 0 &&
+                                e.DateLastRefreshed < DateTimeOffset.UtcNow.AddHours(-6));
 
                 itemsToRefresh.AddRange(episodes);
             }

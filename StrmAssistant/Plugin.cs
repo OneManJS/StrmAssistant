@@ -291,7 +291,7 @@ namespace StrmAssistant
                         }
 
                         if (IsCatchupTaskSelected(CatchupTask.EpisodeRefresh) && e.Item is Episode ep &&
-                            ep.PremiereDate >= DateTimeOffset.UtcNow.AddDays(-90))
+                            LibraryApi.IsPremiereDateInScope(ep, DateTimeOffset.UtcNow.AddDays(-90), false))
                         {
                             QueueManager.EpisodeRefreshItemQueue.Enqueue(ep);
                         }
