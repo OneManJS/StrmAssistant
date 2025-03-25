@@ -15,8 +15,8 @@ namespace StrmAssistant.Options
         public override string EditorTitle => Resources.PluginOptions_EditorTitle_Strm_Assistant;
 
         public override string EditorDescription => string.Empty;
-        
-        public ButtonItem DisclaimerButton { get; set; } = new ButtonItem(Resources.DisclaimerButtonText)
+
+        public ButtonItem DisclaimerButton { get; set; } = new ButtonItem
         {
             Icon = IconNames.privacy_tip, Data1 = "DisclaimerDialog"
         };
@@ -50,6 +50,8 @@ namespace StrmAssistant.Options
 
         public void Initialize()
         {
+            DisclaimerButton.Caption = Resources.DisclaimerButtonText;
+
             if (ShowConflictPluginLoadedStatus)
             {
                 ConflictPluginLoadedStatus.Caption = Resources
