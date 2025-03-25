@@ -213,10 +213,7 @@ namespace StrmAssistant.Common
 
             if (item.Size == 0) return false;
 
-            var mediaStreamCount = item.GetMediaStreams()
-                .FindAll(i => i.Type == MediaStreamType.Video || i.Type == MediaStreamType.Audio).Count;
-
-            return mediaStreamCount > 0;
+            return item.GetMediaStreams().Any(i => i.Type == MediaStreamType.Video || i.Type == MediaStreamType.Audio);
         }
 
         public bool ImageCaptureEnabled(BaseItem item)
@@ -225,17 +222,21 @@ namespace StrmAssistant.Common
             var typeName = item.ExtraType == null ? item.GetType().Name : item.DisplayParent.GetType().Name;
             var typeOptions = libraryOptions.GetTypeOptions(typeName);
 
-            return typeOptions?.ImageFetchers?.Contains("Image Capture") == true;
+            return typeOptions?.ImageFetchers?.Any(f => f == "Image Capture" || f == "Embedded Images") is true;
         }
 
         private List<VirtualFolderInfo> GetLibrariesWithImageCapture(List<VirtualFolderInfo> libraries)
         {
             var librariesWithImageCapture = libraries.Where(l => l.LibraryOptions.TypeOptions.Any(t =>
-                    t.ImageFetchers.Contains("Image Capture") &&
-                    ((l.CollectionType == CollectionType.TvShows.ToString() && t.Type == nameof(Episode)) ||
-                     (l.CollectionType == CollectionType.Movies.ToString() && t.Type == nameof(Movie)) ||
-                     (l.CollectionType == CollectionType.HomeVideos.ToString() && t.Type == nameof(Video)) ||
-                     (l.CollectionType is null && (t.Type == nameof(Episode) || t.Type == nameof(Movie))))))
+                    (t.ImageFetchers.Contains("Image Capture") &&
+                     ((l.CollectionType == CollectionType.TvShows.ToString() && t.Type == nameof(Episode)) ||
+                      (l.CollectionType == CollectionType.Movies.ToString() && t.Type == nameof(Movie)) ||
+                      (l.CollectionType == CollectionType.HomeVideos.ToString() && t.Type == nameof(Video)) ||
+                      (l.CollectionType == CollectionType.MusicVideos.ToString() && t.Type == nameof(MusicVideo)) ||
+                      (l.CollectionType is null && (t.Type == nameof(Episode) || t.Type == nameof(Movie))))) ||
+                    (t.ImageFetchers.Contains("Embedded Images") &&
+                     ((l.CollectionType == CollectionType.Music.ToString() && t.Type == nameof(Audio)) ||
+                      (l.CollectionType == CollectionType.AudioBooks.ToString() && t.Type == nameof(Audio))))))
                 .ToList();
 
             return librariesWithImageCapture;
@@ -347,7 +348,7 @@ namespace StrmAssistant.Common
                 var itemsImageCaptureQuery = new InternalItemsQuery
                 {
                     HasPath = true,
-                    MediaTypes = new[] { MediaType.Video }
+                    MediaTypes = new[] { MediaType.Video, MediaType.Audio }
                 };
 
                 if (enableImageCapture && librariesWithImageCapture.Any())
@@ -517,7 +518,7 @@ namespace StrmAssistant.Common
                 {
                     results.Add(item);
                 }
-                else
+                else if (item is Video)
                 {
                     _logger.Debug("MediaInfoExtract - Item dropped: " + item.Name + " - " + item.Path); // video without audio
                 }
@@ -541,12 +542,21 @@ namespace StrmAssistant.Common
 
             if (!HasMediaInfo(item)) return true;
 
-            var persistMediaInfo = Plugin.Instance.MediaInfoExtractStore.GetOptions().PersistMediaInfo;
-            var mediaInfoRestoreMode =
-                persistMediaInfo && Plugin.Instance.MediaInfoExtractStore.GetOptions().MediaInfoRestoreMode;
+            if (!enableImageCapture) return false;
 
-            return !mediaInfoRestoreMode && enableImageCapture && !item.HasImage(ImageType.Primary) &&
-                   ImageCaptureEnabled(item);
+            var options = Plugin.Instance.MediaInfoExtractStore.GetOptions();
+            if (options.PersistMediaInfo && options.MediaInfoRestoreMode) return false;
+
+            switch (item)
+            {
+                case Video _:
+                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item);
+                case Audio _:
+                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item) &&
+                           item.GetMediaStreams().Any(i => i.Type == MediaStreamType.EmbeddedImage);
+                default:
+                    return false;
+            }
         }
 
         public List<BaseItem> ExpandFavorites(List<BaseItem> items, bool filterNeeded, bool? preExtract,

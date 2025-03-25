@@ -9,6 +9,7 @@ using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Services;
+using StrmAssistant.Common;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -174,12 +175,22 @@ namespace StrmAssistant.Mod
         }
 
         [HarmonyPrefix]
-        private static bool GetInputArgumentPrefix(string input, MediaProtocol protocol, ref string __result)
+        private static bool GetInputArgumentPrefix(ref string input, MediaProtocol protocol, ref string __result)
         {
             if (protocol == MediaProtocol.Http)
             {
                 __result = string.Format(CultureInfo.InvariantCulture, "\"{0}\"", input);
                 return false;
+            }
+
+            if (LibraryApi.IsFileShortcut(input))
+            {
+                var inputPath = input;
+                var mountPath = Task.Run(async () => await Plugin.LibraryApi.GetStrmMountPath(inputPath)).Result;
+                if (!string.IsNullOrEmpty(mountPath))
+                {
+                    input = mountPath;
+                }
             }
 
             return true;
@@ -243,9 +254,7 @@ namespace StrmAssistant.Mod
                 return true;
             }
 
-            if ((item.Parent is null && item.ExtraType is null) ||
-                (!(provider is IDynamicImageProviderWithLibraryOptions) && !provider.Supports(item)) ||
-                !(item is Video || item is Audio))
+            if ((item.Parent is null && item.ExtraType is null) || !(item is Video || item is Audio))
             {
                 return true;
             }
@@ -296,16 +305,15 @@ namespace StrmAssistant.Mod
                         }
                     }
                 }
-                
+
                 if (CurrentRefreshContext.Value.IsNewItem)
                 {
                     return true;
                 }
 
-                if (item.HasImage(ImageType.Primary) && provider is IDynamicImageProvider &&
-                    provider.GetType().Name == "VideoImageProvider" &&
+                if (provider is IDynamicImageProviderWithLibraryOptions && item.HasImage(ImageType.Primary) &&
                     (IsExclusiveFeatureSelected(item.InternalId, ExclusiveControl.CatchAllBlock) ||
-                     !IsExclusiveFeatureSelected(ExclusiveControl.CatchAllAllow) && !options.ReplaceAllImages))
+                     !IsExclusiveFeatureSelected(ExclusiveControl.CatchAllAllow) && !refreshOptions.ReplaceAllImages))
                 {
                     __result = false;
                     return false;
@@ -327,12 +335,12 @@ namespace StrmAssistant.Mod
                 return true;
             }
 
-            if ((item.Parent is null && item.ExtraType is null) || !(provider is IPreRefreshProvider) ||
-                !(provider is ICustomMetadataProvider<Video>))
+            if ((item.Parent is null && item.ExtraType is null) ||
+                !(provider is IPreRefreshProvider && provider.Name == "ffprobe"))
             {
                 return true;
             }
-            
+
             if (CurrentRefreshContext.Value != null && CurrentRefreshContext.Value.InternalId == item.InternalId)
             {
                 __state = true;

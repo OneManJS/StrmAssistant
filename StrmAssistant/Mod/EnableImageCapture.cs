@@ -3,7 +3,6 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.MediaInfo;
-using StrmAssistant.Common;
 using StrmAssistant.ScheduledTask;
 using System;
 using System.Collections.Generic;
@@ -11,7 +10,6 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
-using System.Threading.Tasks;
 using static StrmAssistant.Mod.PatchManager;
 
 namespace StrmAssistant.Mod
@@ -22,12 +20,12 @@ namespace StrmAssistant.Mod
         private static FieldInfo _resourcePoolField;
         private static MethodInfo _isShortcutGetter;
         private static PropertyInfo _isShortcutProperty;
-        private static MethodInfo _supportsImageCapture;
+        private static MethodInfo _supportsVideoImageCapture;
+        private static MethodInfo _supportsAudioEmbeddedImages;
         private static MethodInfo _getImage;
         private static MethodInfo _runExtraction;
         private static Type _quickSingleImageExtractor;
         private static MethodInfo _supportsThumbnailsGetter;
-        private static Type _quickImageSeriesExtractor;
         private static MethodInfo _logThumbnailImageExtractionFailure;
         private static ConstructorInfo _baseOptionsConstructor;
 
@@ -76,12 +74,15 @@ namespace StrmAssistant.Mod
 
             var embyProviders = Assembly.Load("Emby.Providers");
             var videoImageProvider = embyProviders.GetType("Emby.Providers.MediaInfo.VideoImageProvider");
-            _supportsImageCapture =
+            _supportsVideoImageCapture =
                 videoImageProvider.GetMethod("Supports", BindingFlags.Instance | BindingFlags.Public);
             _getImage = videoImageProvider.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .Where(m => m.Name == "GetImage")
                 .OrderByDescending(m => m.GetParameters().Length)
                 .FirstOrDefault();
+            var audioImageProvider = embyProviders.GetType("Emby.Providers.MediaInfo.AudioImageProvider");
+            _supportsAudioEmbeddedImages =
+                audioImageProvider.GetMethod("Supports", BindingFlags.Instance | BindingFlags.Public);
 
             var supportsThumbnailsProperty =
                 typeof(Video).GetProperty("SupportsThumbnails", BindingFlags.Public | BindingFlags.Instance);
@@ -90,8 +91,6 @@ namespace StrmAssistant.Mod
                 imageExtractorBaseType.GetMethod("RunExtraction", BindingFlags.Instance | BindingFlags.Public);
             _quickSingleImageExtractor =
                 mediaEncodingAssembly.GetType("Emby.Server.MediaEncoding.ImageExtraction.QuickSingleImageExtractor");
-            _quickImageSeriesExtractor =
-                mediaEncodingAssembly.GetType("Emby.Server.MediaEncoding.ImageExtraction.QuickImageSeriesExtractor");
 
             var embyServerImplementationsAssembly = Assembly.Load("Emby.Server.Implementations");
             var sqliteItemRepository =
@@ -110,7 +109,9 @@ namespace StrmAssistant.Mod
         {
             PatchUnpatchIsShortcut(apply);
 
-            PatchUnpatch(PatchTracker, apply, _supportsImageCapture, prefix: nameof(SupportsImageCapturePrefix),
+            PatchUnpatch(PatchTracker, apply, _supportsVideoImageCapture, prefix: nameof(SupportsImageCapturePrefix),
+                postfix: nameof(SupportsImageCapturePostfix));
+            PatchUnpatch(PatchTracker, apply, _supportsAudioEmbeddedImages, prefix: nameof(SupportsImageCapturePrefix),
                 postfix: nameof(SupportsImageCapturePostfix));
             PatchUnpatch(PatchTracker, apply, _getImage, prefix: nameof(GetImagePrefix));
             PatchUnpatch(PatchTracker, apply, _supportsThumbnailsGetter,
@@ -379,23 +380,20 @@ namespace StrmAssistant.Mod
                 timeoutProperty.SetValue(newTimeout);
             }
 
-            if (__instance.GetType() == _quickImageSeriesExtractor && LibraryApi.IsFileShortcut(inputPath))
-            {
-                var strmPath = inputPath;
-                inputPath = Task.Run(async () => await Plugin.LibraryApi.GetStrmMountPath(strmPath)).Result;
-            }
-
             if (ImageCaptureItem.Value != null && __instance.GetType() == _quickSingleImageExtractor)
             {
                 timeoutProperty.SetValue(newTimeout);
 
-                var timeSpan =
-                    ImageCaptureItem.Value.MediaContainer.GetValueOrDefault() == MediaContainers.Dvd ||
-                    !ImageCaptureItem.Value.RunTimeTicks.HasValue || ImageCaptureItem.Value.RunTimeTicks.Value <= 0L
-                        ? TimeSpan.FromSeconds(10.0)
-                        : TimeSpan.FromTicks(GetThumbnailPositionTicks(ImageCaptureItem.Value.RunTimeTicks.Value));
+                if (startOffset.HasValue)
+                {
+                    var timeSpan =
+                        ImageCaptureItem.Value.MediaContainer.GetValueOrDefault() == MediaContainers.Dvd ||
+                        !ImageCaptureItem.Value.RunTimeTicks.HasValue || ImageCaptureItem.Value.RunTimeTicks.Value <= 0L
+                            ? TimeSpan.FromSeconds(10.0)
+                            : TimeSpan.FromTicks(GetThumbnailPositionTicks(ImageCaptureItem.Value.RunTimeTicks.Value));
 
-                startOffset = timeSpan;
+                    startOffset = timeSpan;
+                }
 
                 ImageCaptureItem.Value = null;
             }
