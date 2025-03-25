@@ -19,7 +19,6 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using static StrmAssistant.Options.MediaInfoExtractOptions;
 
 namespace StrmAssistant.Common
 {
@@ -187,9 +186,10 @@ namespace StrmAssistant.Common
             return false;
         }
 
-        public async Task UpdateExternalSubtitles(BaseItem item, IDirectoryService directoryService, bool clearCache)
+        public async Task UpdateExternalSubtitles(BaseItem item, MetadataRefreshOptions refreshOptions, bool clearCache,
+            bool persistMediaInfo)
         {
-            var refreshOptions = LibraryApi.MediaInfoRefreshOptions;
+            var directoryService = refreshOptions.DirectoryService;
             var currentStreams = item.GetMediaStreams()
                 .FindAll(i =>
                     !(i.IsExternal && i.Type == MediaStreamType.Subtitle && i.Protocol == MediaProtocol.File));
@@ -217,8 +217,7 @@ namespace StrmAssistant.Common
                 currentStreams.AddRange(externalSubtitleStreams);
                 _itemRepository.SaveMediaStreams(item.InternalId, currentStreams, CancellationToken.None);
 
-                if (Plugin.Instance.MediaInfoExtractStore.GetOptions().PersistMediaInfoMode !=
-                    PersistMediaInfoOption.None.ToString() && Plugin.LibraryApi.IsLibraryInScope(item))
+                if (persistMediaInfo && Plugin.LibraryApi.IsLibraryInScope(item))
                 {
                     _ = Plugin.MediaInfoApi.SerializeMediaInfo(item.InternalId, directoryService, true,
                         "External Subtitle Update").ConfigureAwait(false);

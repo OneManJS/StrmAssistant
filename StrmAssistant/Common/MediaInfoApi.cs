@@ -308,14 +308,14 @@ namespace StrmAssistant.Common
         {
             var workItem = _libraryManager.GetItemById(itemId);
 
+            if (!Plugin.LibraryApi.IsLibraryInScope(workItem)) return false;
+
             if (!Plugin.LibraryApi.HasMediaInfo(workItem))
             {
                 _logger.Info("MediaInfoPersist - Serialization Skipped - No MediaInfo (" + source + ")");
                 return false;
             }
-
-            if (!Plugin.LibraryApi.IsLibraryInScope(workItem)) return false;
-
+            
             var ds = directoryService ?? new DirectoryService(_logger, _fileSystem);
 
             return await SerializeMediaInfo(workItem, ds, overwrite, source).ConfigureAwait(false);

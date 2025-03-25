@@ -336,7 +336,18 @@ namespace StrmAssistant
 
                 if (targetItem != null)
                 {
-                    MediaInfoApi.QueueRefreshAlternateVersions(targetItem, LibraryApi.MediaInfoRefreshOptions, false);
+                    var refreshOptions = new MetadataRefreshOptions(new DirectoryService(Logger, _fileSystem))
+                    {
+                        EnableRemoteContentProbe = true,
+                        ReplaceAllMetadata = true,
+                        EnableThumbnailImageExtraction = false,
+                        EnableSubtitleDownloading = false,
+                        ImageRefreshMode = MetadataRefreshMode.ValidationOnly,
+                        MetadataRefreshMode = MetadataRefreshMode.ValidationOnly,
+                        ReplaceAllImages = false
+                    };
+
+                    MediaInfoApi.QueueRefreshAlternateVersions(targetItem, refreshOptions, false);
                 }
             }
         }

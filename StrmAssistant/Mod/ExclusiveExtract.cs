@@ -293,6 +293,7 @@ namespace StrmAssistant.Mod
                             Plugin.SubtitleApi.HasExternalSubtitleChanged(item, options.DirectoryService, false))
                         {
                             CurrentRefreshContext.Value.IsExternalSubtitleChanged = true;
+                            options.EnableRemoteContentProbe = true;
                         }
 
                         if (!IsExclusiveFeatureSelected(ExclusiveControl.IgnoreFileChange) &&
@@ -427,8 +428,9 @@ namespace StrmAssistant.Mod
             }
             else if (CurrentRefreshContext.Value.IsExternalSubtitleChanged)
             {
-                var directoryService = CurrentRefreshContext.Value.MetadataRefreshOptions.DirectoryService;
-                _ = Plugin.SubtitleApi.UpdateExternalSubtitles(item, directoryService, false).ConfigureAwait(false);
+                var refreshOptions = CurrentRefreshContext.Value.MetadataRefreshOptions;
+                _ = Plugin.SubtitleApi.UpdateExternalSubtitles(item, refreshOptions, false, isPersistInScope)
+                    .ConfigureAwait(false);
             }
         }
 

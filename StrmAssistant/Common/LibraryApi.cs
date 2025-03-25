@@ -36,9 +36,6 @@ namespace StrmAssistant.Common
         private readonly IMediaMountManager _mediaMountManager;
         private readonly IUserManager _userManager;
 
-        public static MetadataRefreshOptions MediaInfoRefreshOptions;
-        public static MetadataRefreshOptions ImageCaptureRefreshOptions;
-
         public static ExtraType[] IncludeExtraTypes =
         {
             ExtraType.AdditionalPart, ExtraType.BehindTheScenes, ExtraType.Clip, ExtraType.DeletedScene,
@@ -112,28 +109,6 @@ namespace StrmAssistant.Common
 
             UpdateLibraryPathsInScope(Plugin.Instance.MediaInfoExtractStore.GetOptions().LibraryScope);
             FetchUsers();
-
-            MediaInfoRefreshOptions = new MetadataRefreshOptions(_fileSystem)
-            {
-                EnableRemoteContentProbe = true,
-                ReplaceAllMetadata = true,
-                EnableThumbnailImageExtraction = false,
-                EnableSubtitleDownloading = false,
-                ImageRefreshMode = MetadataRefreshMode.ValidationOnly,
-                MetadataRefreshMode = MetadataRefreshMode.ValidationOnly,
-                ReplaceAllImages = false
-            };
-
-            ImageCaptureRefreshOptions = new MetadataRefreshOptions(_fileSystem)
-            {
-                EnableRemoteContentProbe = true,
-                ReplaceAllMetadata = true,
-                EnableThumbnailImageExtraction = false,
-                EnableSubtitleDownloading = false,
-                ImageRefreshMode = MetadataRefreshMode.Default,
-                MetadataRefreshMode = MetadataRefreshMode.Default,
-                ReplaceAllImages = true
-            };
         }
 
         public void UpdateLibraryPathsInScope(string currentScope)
@@ -658,8 +633,7 @@ namespace StrmAssistant.Common
             }
         }
 
-        public async Task<bool?> OrchestrateMediaInfoProcessAsync(BaseItem taskItem, IDirectoryService directoryService,
-            string source, CancellationToken cancellationToken)
+        public async Task<bool?> OrchestrateMediaInfoProcessAsync(BaseItem taskItem, string source, CancellationToken cancellationToken)
         {
             var persistMediaInfoMode = Plugin.Instance.MediaInfoExtractStore.GetOptions().PersistMediaInfoMode;
             var persistMediaInfo = persistMediaInfoMode != PersistMediaInfoOption.None.ToString();
@@ -681,6 +655,19 @@ namespace StrmAssistant.Common
             var fileExtension = Path.GetExtension(filePath).TrimStart('.');
             var extractSkip = mediaInfoRestoreMode || ExcludeMediaExtensions.Contains(fileExtension);
 
+            var refreshOptions = new MetadataRefreshOptions(new DirectoryService(_logger, _fileSystem))
+            {
+                EnableRemoteContentProbe = true,
+                ReplaceAllMetadata = true,
+                EnableThumbnailImageExtraction = false,
+                EnableSubtitleDownloading = false,
+                ImageRefreshMode = MetadataRefreshMode.ValidationOnly,
+                MetadataRefreshMode = MetadataRefreshMode.ValidationOnly,
+                ReplaceAllImages = false
+            };
+
+            var directoryService = refreshOptions.DirectoryService;
+
             if (Uri.TryCreate(filePath, UriKind.Absolute, out var uri) && uri.IsAbsoluteUri &&
                 uri.Scheme == Uri.UriSchemeFile)
             {
@@ -694,7 +681,11 @@ namespace StrmAssistant.Common
             {
                 EnableImageCapture.AllowImageCaptureInstance(taskItem);
                 imageCapture = true;
-                var refreshOptions = ImageCaptureRefreshOptions;
+
+                refreshOptions.ImageRefreshMode = MetadataRefreshMode.Default;
+                refreshOptions.MetadataRefreshMode = MetadataRefreshMode.Default;
+                refreshOptions.ReplaceAllImages = true;
+
                 await taskItem.RefreshMetadata(refreshOptions, cancellationToken).ConfigureAwait(false);
             }
 
@@ -710,8 +701,8 @@ namespace StrmAssistant.Common
                     {
                         if (Plugin.SubtitleApi.HasExternalSubtitleChanged(taskItem, directoryService, true))
                         {
-                            await Plugin.SubtitleApi.UpdateExternalSubtitles(taskItem, directoryService, false)
-                                .ConfigureAwait(false);
+                            await Plugin.SubtitleApi
+                                .UpdateExternalSubtitles(taskItem, refreshOptions, false, true).ConfigureAwait(false);
                         }
 
                         return false;
@@ -730,15 +721,6 @@ namespace StrmAssistant.Common
             }
 
             return true;
-        }
-
-        public async Task<bool?> OrchestrateMediaInfoProcessAsync(BaseItem taskItem, string source,
-            CancellationToken cancellationToken)
-        {
-            var directoryService = new DirectoryService(_logger, _fileSystem);
-
-            return await OrchestrateMediaInfoProcessAsync(taskItem, directoryService, source, cancellationToken)
-                .ConfigureAwait(false);
         }
 
         public static bool IsFileShortcut(string path)

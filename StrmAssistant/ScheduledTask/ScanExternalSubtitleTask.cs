@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using static StrmAssistant.Options.MediaInfoExtractOptions;
 
 namespace StrmAssistant.ScheduledTask
 {
@@ -31,10 +32,23 @@ namespace StrmAssistant.ScheduledTask
             await Task.Yield();
             progress.Report(0);
 
+            var persistMediaInfoMode = Plugin.Instance.MediaInfoExtractStore.GetOptions().PersistMediaInfoMode;
+            _logger.Info("Persist MediaInfo Mode: " + persistMediaInfoMode);
+            var persistMediaInfo = persistMediaInfoMode != PersistMediaInfoOption.None.ToString();
+
             var items = Plugin.LibraryApi.FetchPostExtractTaskItems(false);
             _logger.Info("ExternalSubtitle - Number of items: " + items.Count);
 
-            var directoryService = new DirectoryService(_logger, _fileSystem);
+            var refreshOptions = new MetadataRefreshOptions(new DirectoryService(_logger, _fileSystem))
+            {
+                EnableRemoteContentProbe = true,
+                ReplaceAllMetadata = false,
+                EnableThumbnailImageExtraction = false,
+                EnableSubtitleDownloading = false,
+                ImageRefreshMode = MetadataRefreshMode.ValidationOnly,
+                MetadataRefreshMode = MetadataRefreshMode.ValidationOnly,
+                ReplaceAllImages = false
+            };
 
             double total = items.Count;
             var index = 0;
@@ -72,10 +86,11 @@ namespace StrmAssistant.ScheduledTask
                             return;
                         }
 
-                        if (Plugin.SubtitleApi.HasExternalSubtitleChanged(taskItem, directoryService, true))
+                        if (Plugin.SubtitleApi.HasExternalSubtitleChanged(taskItem, refreshOptions.DirectoryService,
+                                true))
                         {
                             await Plugin.SubtitleApi
-                                .UpdateExternalSubtitles(taskItem, directoryService, false)
+                                .UpdateExternalSubtitles(taskItem, refreshOptions, false, persistMediaInfo)
                                 .ConfigureAwait(false);
 
                             _logger.Info("ExternalSubtitle - Item Processed: " + taskItem.Name + " - " + taskItem.Path);

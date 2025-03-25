@@ -128,8 +128,8 @@ namespace StrmAssistant.ScheduledTask
                             if (!Plugin.LibraryApi.HasMediaInfo(taskEpisode))
                             {
                                 result1 = await Plugin.LibraryApi
-                                    .OrchestrateMediaInfoProcessAsync(taskEpisode, directoryService,
-                                        "IntroFingerprintExtract Task", cancellationToken).ConfigureAwait(false);
+                                    .OrchestrateMediaInfoProcessAsync(taskEpisode, "IntroFingerprintExtract Task",
+                                        cancellationToken).ConfigureAwait(false);
 
                                 if (result1 is null)
                                 {
