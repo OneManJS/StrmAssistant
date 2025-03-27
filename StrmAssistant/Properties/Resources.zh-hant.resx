@@ -647,4 +647,7 @@
   <data name="MetadataEnhanceOptions_EpisodeRefreshScope_Episode_refresh_scope_for_scheduled_task_and_catch_up__Default_is_no_overview_and_no_image_" xml:space="preserve">
     <value>規劃任務與追更模式劇集元資料刷新的範圍，預設為無圖無簡介。</value>
   </data>
+  <data name="EpisodeRefreshOption_ReplaceCapturedImage_Replace_Captured_Image" xml:space="preserve">
+    <value>替換影片截圖</value>
+  </data>
 </root>

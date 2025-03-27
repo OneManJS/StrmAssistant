@@ -1,4 +1,5 @@
-﻿using Emby.Web.GenericEdit.PropertyDiff;
+﻿using Emby.Media.Common.Extensions;
+using Emby.Web.GenericEdit.PropertyDiff;
 using MediaBrowser.Common;
 using MediaBrowser.Model.Logging;
 using StrmAssistant.Common;
@@ -199,6 +200,17 @@ namespace StrmAssistant.Options.Store
                 _logger.Info("MovieDbEpisodeGroup is set to {0}", options.MovieDbEpisodeGroup);
                 _logger.Info("LocalEpisodeGroup is set to {0}", options.LocalEpisodeGroup);
                 _logger.Info("EnhanceMovieDbPerson is set to {0}", options.EnhanceMovieDbPerson);
+                _logger.Info("PreferOriginalPoster is set to {0}", options.PreferOriginalPoster);
+                _logger.Info("PinyinSortName is set to {0}", options.PinyinSortName);
+                _logger.Info("EnhanceNfoMetadata is set to {0}", options.EnhanceNfoMetadata);
+                var episodeRefreshScope = string.Join(", ",
+                    options.EpisodeRefreshScope?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s =>
+                            Enum.TryParse(s.Trim(), true, out EpisodeRefreshOption option)
+                                ? option.GetDescription()
+                                : null)
+                        .Where(d => d != null) ?? Enumerable.Empty<string>());
+                _logger.Info("EpisodeRefreshScope is set to {0}", episodeRefreshScope);
                 _logger.Info("AltMovieDbConfig is set to {0}", options.AltMovieDbConfig);
                 _logger.Info("AltMovieDbApiUrl is set to {0}",
                     !string.IsNullOrEmpty(options.AltMovieDbApiUrl)
@@ -212,9 +224,6 @@ namespace StrmAssistant.Options.Store
                     !string.IsNullOrEmpty(options.AltMovieDbApiKey)
                         ? options.AltMovieDbApiKey
                         : "EMPTY");
-                _logger.Info("PreferOriginalPoster is set to {0}", options.PreferOriginalPoster);
-                _logger.Info("PinyinSortName is set to {0}", options.PinyinSortName);
-                _logger.Info("EnhanceNfoMetadata is set to {0}", options.EnhanceNfoMetadata);
             }
         }
     }

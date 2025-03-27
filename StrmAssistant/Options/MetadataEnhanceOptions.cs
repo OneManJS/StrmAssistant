@@ -119,7 +119,9 @@ namespace StrmAssistant.Options
             [DescriptionL("EpisodeRefreshOption_NonChineseOverview_Non_Chinese_Overview", typeof(Resources))]
             NonChineseOverview,
             [DescriptionL("EpisodeRefreshOption_DefaultEpisodeName_Default_Episode_Name", typeof(Resources))]
-            DefaultEpisodeName
+            DefaultEpisodeName,
+            [DescriptionL("EpisodeRefreshOption_ReplaceCapturedImage_Replace_Captured_Image", typeof(Resources))]
+            ReplaceCapturedImage
         }
 
         [Browsable(false)]

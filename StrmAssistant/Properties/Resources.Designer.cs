@@ -197,7 +197,16 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Refresh metadata for episodes without overview or image.
+        ///   Looks up a localized string similar to Replace Captured Image.
+        /// </summary>
+        public static string EpisodeRefreshOption_ReplaceCapturedImage_Replace_Captured_Image {
+            get {
+                return ResourceManager.GetString("EpisodeRefreshOption_ReplaceCapturedImage_Replace_Captured_Image", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Refresh missing metadata and images for episodes by preference.
         /// </summary>
         public static string EpisodeRefreshTask_Description_Refresh_metadata_for_episodes_missing_overview {
             get {
@@ -1213,7 +1222,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Episode Metadata Refresh Scope.
+        ///   Looks up a localized string similar to Episode Refresh Scope.
         /// </summary>
         public static string MetadataEnhanceOptions_EpisodeRefreshScope_Episode_Metadata_Refresh_Scope {
             get {
@@ -1222,7 +1231,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Episode refresh scope for scheduled task and catch-up. Default is no overview and no image..
+        ///   Looks up a localized string similar to Episode metadata refresh scope for scheduled task and catch-up. Default is No Overview and No Image..
         /// </summary>
         public static string MetadataEnhanceOptions_EpisodeRefreshScope_Episode_refresh_scope_for_scheduled_task_and_catch_up__Default_is_no_overview_and_no_image_ {
             get {
@@ -1598,7 +1607,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Persists media info and chapter markers to json file.
+        ///   Looks up a localized string similar to Export media info and chapter markers to JSON files.
         /// </summary>
         public static string PersistMediaInfoTask_Description_Persists_media_info_to_json_file {
             get {

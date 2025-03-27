@@ -734,4 +734,7 @@
   <data name="MetadataEnhanceOptions_EpisodeRefreshScope_Episode_refresh_scope_for_scheduled_task_and_catch_up__Default_is_no_overview_and_no_image_" xml:space="preserve">
     <value>Episode metadata refresh scope for scheduled task and catch-up. Default is No Overview and No Image.</value>
   </data>
+  <data name="EpisodeRefreshOption_ReplaceCapturedImage_Replace_Captured_Image" xml:space="preserve">
+    <value>Replace Captured Image</value>
+  </data>
 </root>

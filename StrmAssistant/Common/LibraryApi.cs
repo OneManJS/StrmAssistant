@@ -988,14 +988,37 @@ namespace StrmAssistant.Common
             }
         }
 
+        private bool EpisodeNeedsRefresh(Episode item, DateTimeOffset lookBackTime,
+            HashSet<EpisodeRefreshOption> episodeRefreshOptions, bool includeNoPrem)
+        {
+            var name = item.Name;
+            var overview = item.Overview;
+            var primaryImageInfo = item.GetImageInfo(ImageType.Primary, 0);
+            var dimensionsMatch = item.Width > 0 && item.Height > 0 && item.Width == primaryImageInfo?.Width &&
+                                  item.Height == primaryImageInfo?.Height;
+            var hasProviderIds = item.Series != null && item.Series.ProviderIds.Count > 0;
+
+            var needsRefresh = string.IsNullOrWhiteSpace(overview) ||
+                               (episodeRefreshOptions.Contains(EpisodeRefreshOption.NoImage) &&
+                                primaryImageInfo is null) ||
+                               (episodeRefreshOptions.Contains(EpisodeRefreshOption.NonChineseOverview) &&
+                                !IsChinese(overview)) ||
+                               (episodeRefreshOptions.Contains(EpisodeRefreshOption.DefaultEpisodeName) &&
+                                IsDefaultChineseEpisodeName(name)) ||
+                               (episodeRefreshOptions.Contains(EpisodeRefreshOption.ReplaceCapturedImage) &&
+                                dimensionsMatch);
+
+            return needsRefresh && hasProviderIds && IsPremiereDateInScope(item, lookBackTime, includeNoPrem);
+        }
+
         public List<Episode> FetchEpisodeRefreshTaskItems()
         {
             var lookBackDays = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshLookBackDays;
             _logger.Info("EpisodeRefresh - Look back days: " + lookBackDays);
+            var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
+
             var episodeRefreshScope = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshScope;
             _logger.Info("EpisodeRefresh - Scope: " + episodeRefreshScope);
-
-            var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
             var episodeRefreshOptions = Enum.GetValues<EpisodeRefreshOption>()
                 .Where(o => episodeRefreshScope?.Contains(o.ToString(), StringComparison.OrdinalIgnoreCase) is true)
                 .ToHashSet();
@@ -1006,14 +1029,7 @@ namespace StrmAssistant.Common
                     IncludeItemTypes = new[] { nameof(Episode) }, HasIndexNumber = true, IsLocked = false
                 })
                 .OfType<Episode>()
-                .Where(e => (string.IsNullOrWhiteSpace(e.Overview) ||
-                             (episodeRefreshOptions.Contains(EpisodeRefreshOption.NoImage) &&
-                              !e.HasImage(ImageType.Primary)) ||
-                             (episodeRefreshOptions.Contains(EpisodeRefreshOption.NonChineseOverview) &&
-                              !IsChinese(e.Overview)) ||
-                             (episodeRefreshOptions.Contains(EpisodeRefreshOption.DefaultEpisodeName) &&
-                              IsDefaultChineseEpisodeName(e.Name))) && IsPremiereDateInScope(e, lookBackTime, true) &&
-                            e.Series.ProviderIds.Count > 0)
+                .Where(e => EpisodeNeedsRefresh(e, lookBackTime, episodeRefreshOptions, true))
                 .OrderByDescending(GetPremiereDateOrDefault)
                 .ToList();
 
@@ -1026,10 +1042,10 @@ namespace StrmAssistant.Common
         {
             const int lookBackDays = 90;
             _logger.Info("EpisodeRefresh - Look back days: " + lookBackDays);
+            var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
+
             var episodeRefreshScope = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshScope;
             _logger.Info("EpisodeRefresh - Scope: " + episodeRefreshScope);
-
-            var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
             var episodeRefreshOptions = Enum.GetValues<EpisodeRefreshOption>()
                 .Where(o => episodeRefreshScope?.Contains(o.ToString(), StringComparison.OrdinalIgnoreCase) is true)
                 .ToHashSet();
@@ -1041,8 +1057,7 @@ namespace StrmAssistant.Common
             {
                 var season = group.Key;
 
-                var episodes = season
-                    .GetEpisodes(new InternalItemsQuery
+                var episodes = season.GetEpisodes(new InternalItemsQuery
                     {
                         ExcludeItemIds = group.Select(e => e.InternalId).ToArray(),
                         IncludeItemTypes = new[] { nameof(Episode) },
@@ -1051,14 +1066,7 @@ namespace StrmAssistant.Common
                         OrderBy = new (string, SortOrder)[] { (ItemSortBy.IndexNumber, SortOrder.Ascending) }
                     })
                     .Items.OfType<Episode>()
-                    .Where(e => (string.IsNullOrWhiteSpace(e.Overview) ||
-                                 (episodeRefreshOptions.Contains(EpisodeRefreshOption.NoImage) &&
-                                  !e.HasImage(ImageType.Primary)) ||
-                                 (episodeRefreshOptions.Contains(EpisodeRefreshOption.NonChineseOverview) &&
-                                  !IsChinese(e.Overview)) ||
-                                 (episodeRefreshOptions.Contains(EpisodeRefreshOption.DefaultEpisodeName) &&
-                                  IsDefaultChineseEpisodeName(e.Name))) &&
-                                IsPremiereDateInScope(e, lookBackTime, false) && e.Series.ProviderIds.Count > 0);
+                    .Where(e => EpisodeNeedsRefresh(e, lookBackTime, episodeRefreshOptions, false));
 
                 itemsToRefresh.AddRange(episodes);
             }
