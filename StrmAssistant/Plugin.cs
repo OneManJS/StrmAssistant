@@ -200,7 +200,7 @@ namespace StrmAssistant
 
                 if (library != null && (library.CollectionType == CollectionType.Movies.ToString() ||
                                         library.CollectionType == CollectionType.TvShows.ToString() &&
-                                        options.MergeSeriesPreference == MergeScopeOption.GlobalScope ||
+                                        options.MergeSeriesPreference == MergeSeriesScopeOption.GlobalScope ||
                                         library.CollectionType is null))
                 {
                     MergeMultiVersionTask.CurrentScanLibrary.Value = library;

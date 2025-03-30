@@ -127,7 +127,7 @@ namespace StrmAssistant.Mod
             if (item.Parent is null && item.ExtraType is null) return;
 
             if (item is Series series && Plugin.Instance.ExperienceEnhanceStore.GetOptions().MergeSeriesPreference ==
-                MergeScopeOption.GlobalScope)
+                MergeSeriesScopeOption.GlobalScope)
             {
                 CurrentAllCollectionFolders.Value = GetAllCollectionFolders(series);
             }

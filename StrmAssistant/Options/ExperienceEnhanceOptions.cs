@@ -20,8 +20,10 @@ namespace StrmAssistant.Options
         [Required]
         public bool MergeMultiVersion { get; set; } = false;
 
-        public enum MergeScopeOption
+        public enum MergeMoviesScopeOption
         {
+            [DescriptionL("MergeScopeOption_FolderScope_FolderScope", typeof(Resources))]
+            FolderScope,
             [DescriptionL("MergeScopeOption_LibraryScope_LibraryScope", typeof(Resources))]
             LibraryScope,
             [DescriptionL("MergeScopeOption_GlobalScope_GlobalScope", typeof(Resources))]
@@ -30,12 +32,20 @@ namespace StrmAssistant.Options
         
         [DisplayNameL("ExperienceEnhanceOptions_MergeMoviePreferences_Movie_Merge_Preference", typeof(Resources))]
         [VisibleCondition(nameof(MergeMultiVersion), SimpleCondition.IsTrue)]
-        public MergeScopeOption MergeMoviesPreference { get; set; } = MergeScopeOption.LibraryScope;
+        public MergeMoviesScopeOption MergeMoviesPreference { get; set; } = MergeMoviesScopeOption.FolderScope;
         
+        public enum MergeSeriesScopeOption
+        {
+            [DescriptionL("MergeScopeOption_LibraryScope_LibraryScope", typeof(Resources))]
+            LibraryScope,
+            [DescriptionL("MergeScopeOption_GlobalScope_GlobalScope", typeof(Resources))]
+            GlobalScope
+        }
+
         [DisplayNameL("ExperienceEnhanceOptions_MergeSeriesPreferences_Series_Merge_Preference", typeof(Resources))]
         [VisibleCondition(nameof(MergeMultiVersion), SimpleCondition.IsTrue)]
         [EnabledCondition(nameof(IsModSupported), SimpleCondition.IsTrue)]
-        public MergeScopeOption MergeSeriesPreference { get; set; } = MergeScopeOption.LibraryScope;
+        public MergeSeriesScopeOption MergeSeriesPreference { get; set; } = MergeSeriesScopeOption.LibraryScope;
 
         [VisibleCondition(nameof(MergeMultiVersion), SimpleCondition.IsTrue)]
         public ButtonItem SplitMoviesButton =>

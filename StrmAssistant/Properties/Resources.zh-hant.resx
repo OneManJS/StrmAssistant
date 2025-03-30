@@ -656,4 +656,7 @@
   <data name="MetadataEnhanceOptions_EpisodeRefreshLookbackDays_Episode_metadata_refresh_lookback_days__Default_is_365_" xml:space="preserve">
     <value>計畫任務劇集元資料刷新回溯天數，預設為365天。</value>
   </data>
+  <data name="MergeScopeOption_FolderScope_FolderScope" xml:space="preserve">
+    <value>同目錄合併</value>
+  </data>
 </root>

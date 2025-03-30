@@ -743,4 +743,7 @@
   <data name="MetadataEnhanceOptions_EpisodeRefreshLookbackDays_Episode_metadata_refresh_lookback_days__Default_is_365_" xml:space="preserve">
     <value>Episode metadata refresh lookback days for scheduled task. Default is 365 days.</value>
   </data>
+  <data name="MergeScopeOption_FolderScope_FolderScope" xml:space="preserve">
+    <value>Folder Scope</value>
+  </data>
 </root>

@@ -656,4 +656,7 @@
   <data name="MetadataEnhanceOptions_EpisodeRefreshLookbackDays_Episode_metadata_refresh_lookback_days__Default_is_365_" xml:space="preserve">
     <value>计划任务剧集元数据刷新回溯天数，默认为365天。</value>
   </data>
+  <data name="MergeScopeOption_FolderScope_FolderScope" xml:space="preserve">
+    <value>同目录合并</value>
+  </data>
 </root>

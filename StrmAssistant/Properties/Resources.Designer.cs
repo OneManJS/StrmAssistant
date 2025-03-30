@@ -1062,6 +1062,15 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to FolderScope.
+        /// </summary>
+        public static string MergeScopeOption_FolderScope_FolderScope {
+            get {
+                return ResourceManager.GetString("MergeScopeOption_FolderScope_FolderScope", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Global Scope.
         /// </summary>
         public static string MergeScopeOption_GlobalScope_GlobalScope {
@@ -1222,7 +1231,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Episode metadata refresh lookback days. Default is 365..
+        ///   Looks up a localized string similar to Episode metadata refresh lookback days for scheduled task. Default is 365 days..
         /// </summary>
         public static string MetadataEnhanceOptions_EpisodeRefreshLookbackDays_Episode_metadata_refresh_lookback_days__Default_is_365_ {
             get {
