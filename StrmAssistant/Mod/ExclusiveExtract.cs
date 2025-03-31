@@ -2,6 +2,7 @@ using Emby.Media.Model.ProbeModel;
 using HarmonyLib;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
@@ -45,6 +46,7 @@ namespace StrmAssistant.Mod
         private static MethodInfo _clearImages;
         private static MethodInfo _isSaverEnabledForItem;
         private static MethodInfo _afterMetadataRefresh;
+        private static MethodInfo _isProbingAllowed;
         private static MethodInfo _runFfProcess;
         private static MethodInfo _getInputArgument;
         private static MethodInfo _getMediaInfo;
@@ -59,10 +61,10 @@ namespace StrmAssistant.Mod
 
         private static MethodInfo _getRefreshOptions;
 
+        private static readonly AsyncLocal<bool> ShouldCleanEmbeddedMetadata = new AsyncLocal<bool>();
         private static readonly AsyncLocal<long> ExclusiveItem = new AsyncLocal<long>();
         private static readonly AsyncLocal<long> ProtectIntroItem = new AsyncLocal<long>();
-
-        private static AsyncLocal<RefreshContext> CurrentRefreshContext { get; } = new AsyncLocal<RefreshContext>();
+        private static readonly AsyncLocal<RefreshContext> CurrentRefreshContext = new AsyncLocal<RefreshContext>();
 
         public ExclusiveExtract()
         {
@@ -89,6 +91,9 @@ namespace StrmAssistant.Mod
                 providerManager.GetMethod("IsSaverEnabledForItem", BindingFlags.Instance | BindingFlags.NonPublic);
             _afterMetadataRefresh =
                 typeof(BaseItem).GetMethod("AfterMetadataRefresh", BindingFlags.Instance | BindingFlags.Public);
+            var fFProbeProvider = embyProviders.GetType("Emby.Providers.MediaInfo.FFProbeProvider");
+            _isProbingAllowed =
+                fFProbeProvider.GetMethod("IsProbingAllowed", BindingFlags.Static | BindingFlags.NonPublic);
 
             var mediaEncodingAssembly = Assembly.Load("Emby.Server.MediaEncoding");
             var mediaProbeManager =
@@ -150,6 +155,7 @@ namespace StrmAssistant.Mod
             PatchUnpatch(PatchTracker, true, _runFfProcess, prefix: nameof(RunFfProcessPrefix),
                 finalizer: nameof(RunFfProcessFinalizer));
             PatchUnpatch(PatchTracker, true, _getInputArgument, prefix: nameof(GetInputArgumentPrefix));
+            PatchUnpatch(PatchTracker, true, _isProbingAllowed, prefix: nameof(IsProbingAllowedPrefix));
             PatchUnpatch(PatchTracker, true, _getMediaInfo, postfix: nameof(GetMediaInfoPostfix));
         }
 
@@ -196,12 +202,29 @@ namespace StrmAssistant.Mod
             return true;
         }
 
+        [HarmonyPrefix]
+        private static void IsProbingAllowedPrefix(BaseItem item, MetadataRefreshOptions options)
+        {
+            if (item is Movie || item is Episode)
+            {
+                ShouldCleanEmbeddedMetadata.Value = true;
+            }
+        }
+
         [HarmonyPostfix]
         private static void GetMediaInfoPostfix(ProbeResult data, bool isAudio, string path, MediaProtocol protocol,
             MediaInfo __result)
         {
             if (isAudio) return;
 
+            if (!ShouldCleanEmbeddedMetadata.Value) return;
+
+            __result.Name = null;
+            __result.Overview = null;
+            __result.PremiereDate = null;
+            __result.ProductionYear = null;
+            __result.Studios = Array.Empty<string>();
+            __result.Tags = Array.Empty<string>();
             __result.Album = null;
             __result.AlbumArtists = Array.Empty<string>();
             __result.AlbumTags = Array.Empty<string>();
