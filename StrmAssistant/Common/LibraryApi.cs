@@ -690,6 +690,8 @@ namespace StrmAssistant.Common
                 refreshOptions.ImageRefreshMode = MetadataRefreshMode.FullRefresh;
                 refreshOptions.ReplaceAllImages = true;
 
+                taskItem.DateLastRefreshed = new DateTimeOffset();
+
                 await _providerManager
                     .RefreshSingleItem(taskItem, refreshOptions, collectionFolders, dummyLibraryOptions,
                         cancellationToken).ConfigureAwait(false);
@@ -721,6 +723,8 @@ namespace StrmAssistant.Common
                 {
                     option.ImageFetchers = Array.Empty<string>();
                 }
+
+                taskItem.DateLastRefreshed = new DateTimeOffset();
 
                 await _providerManager
                     .RefreshSingleItem(taskItem, refreshOptions, collectionFolders, dummyLibraryOptions, cancellationToken)
