@@ -8,7 +8,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static StrmAssistant.Options.GeneralOptions;
-using static StrmAssistant.Options.MediaInfoExtractOptions;
 using static StrmAssistant.Options.Utility;
 
 namespace StrmAssistant.Common
@@ -713,8 +712,6 @@ namespace StrmAssistant.Common
                             .Tier2MaxConcurrentCount;
                         Logger.Info("Tier2 Max Concurrent Count: " + tier2MaxConcurrentCount);
 
-                        var refreshOptions = Plugin.MetadataApi.GetMetadataFullRefreshOptions();
-
                         IsEpisodeRefreshProcessTaskRunning = true;
 
                         foreach (var item in itemsToRefresh)
@@ -755,10 +752,7 @@ namespace StrmAssistant.Common
                                         return;
                                     }
 
-                                    EnableItemExclusiveFeatures(taskItem.InternalId, ExclusiveControl.CatchAllBlock,
-                                        ExclusiveControl.IgnoreExtSubChange);
-
-                                    await taskItem.RefreshMetadata(refreshOptions, cancellationToken)
+                                    await Plugin.LibraryApi.OrchestrateEpisodeRefreshAsync(taskItem, cancellationToken)
                                         .ConfigureAwait(false);
 
                                     Logger.Info("EpisodeRefresh - Item processed: " + taskItem.Name + " - " +

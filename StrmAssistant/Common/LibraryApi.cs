@@ -1082,6 +1082,36 @@ namespace StrmAssistant.Common
             }
         }
 
+        public async Task OrchestrateEpisodeRefreshAsync(Episode taskItem, CancellationToken cancellationToken)
+        {
+            var collectionFolders = (BaseItem[])_libraryManager.GetCollectionFolders(taskItem);
+            var libraryOptions = _libraryManager.GetLibraryOptions(taskItem);
+            var dummyLibraryOptions = CopyLibraryOptions(libraryOptions);
+            var typeOption = dummyLibraryOptions.TypeOptions.FirstOrDefault(o => o.Type == nameof(Episode));
+
+            if (typeOption != null)
+            {
+                if (typeOption.MetadataFetchers.Length == 0)
+                {
+                    typeOption.MetadataFetchers = new[] { "TheMovieDb" };
+                }
+
+                if (typeOption.ImageFetchers.Length == 0)
+                {
+                    typeOption.ImageFetchers = new[] { "TheMovieDb" };
+                }
+            }
+
+            EnableItemExclusiveFeatures(taskItem.InternalId, ExclusiveControl.CatchAllBlock,
+                ExclusiveControl.IgnoreExtSubChange);
+
+            var refreshOptions = Plugin.MetadataApi.GetMetadataFullRefreshOptions();
+
+            await _providerManager
+                .RefreshSingleItem(taskItem, refreshOptions, collectionFolders, dummyLibraryOptions,
+                    cancellationToken).ConfigureAwait(false);
+        }
+
         private bool EpisodeNeedsRefresh(Episode item, DateTimeOffset lookBackTime,
             HashSet<EpisodeRefreshOption> episodeRefreshOptions, bool includeNoPrem)
         {
@@ -1108,7 +1138,7 @@ namespace StrmAssistant.Common
         public List<Episode> FetchEpisodeRefreshTaskItems()
         {
             var lookBackDays = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshLookbackDays;
-            _logger.Info("EpisodeRefresh - Look back days: " + lookBackDays);
+            _logger.Info("EpisodeRefresh - Lookback days: " + lookBackDays);
             var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
 
             var episodeRefreshScope = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshScope;
@@ -1135,7 +1165,7 @@ namespace StrmAssistant.Common
         public List<Episode> FetchEpisodeRefreshQueueItems(List<Episode> items)
         {
             const int lookBackDays = 90;
-            _logger.Info("EpisodeRefresh - Look back days: " + lookBackDays);
+            _logger.Info("EpisodeRefresh - Lookback days: " + lookBackDays);
             var lookBackTime = DateTimeOffset.UtcNow.AddDays(-lookBackDays);
 
             var episodeRefreshScope = Plugin.Instance.MetadataEnhanceStore.GetOptions().EpisodeRefreshScope;
