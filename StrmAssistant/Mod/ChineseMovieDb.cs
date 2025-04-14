@@ -8,6 +8,7 @@ using StrmAssistant.ScheduledTask;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
@@ -212,6 +213,13 @@ namespace StrmAssistant.Mod
             {
                 item.Name = MovieGetTitleStub(movieData);
             }
+
+            var overview = Traverse.Create(movieData).Property("overview").GetValue<string>();
+
+            if (IsUpdateNeeded(item.Overview) && !string.IsNullOrEmpty(overview))
+            {
+                item.Overview = WebUtility.HtmlDecode(overview).Replace("\n\n", "\n");
+            }
         }
 
         [HarmonyPrefix]
@@ -299,6 +307,11 @@ namespace StrmAssistant.Mod
                 {
                     item.Overview = null;
                 }
+
+                if (!string.IsNullOrEmpty(item.Tagline))
+                {
+                    item.Tagline = null;
+                }
             }
         }
 
@@ -314,6 +327,13 @@ namespace StrmAssistant.Mod
             if (IsUpdateNeeded(item.Name))
             {
                 item.Name = SeriesGetTitleStub(seriesInfo);
+            }
+
+            var overview = Traverse.Create(seriesInfo).Property("overview").GetValue<string>();
+
+            if (IsUpdateNeeded(item.Overview) && !string.IsNullOrEmpty(overview))
+            {
+                item.Overview = WebUtility.HtmlDecode(overview).Replace("\n\n", "\n");
             }
 
             if (isFirstLanguage && string.Equals(CurrentLookupLanguageCountryCode.Value, "CN",
