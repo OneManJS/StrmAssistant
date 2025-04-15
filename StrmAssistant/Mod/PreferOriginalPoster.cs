@@ -10,7 +10,6 @@ using MediaBrowser.Model.Providers;
 using MediaBrowser.Model.Serialization;
 using StrmAssistant.Common;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -35,27 +34,11 @@ namespace StrmAssistant.Mod
         private static Assembly _movieDbAssembly;
         private static MethodInfo _getMovieInfo;
         private static MethodInfo _ensureSeriesInfo;
-        private static PropertyInfo _tmdbIdMovieDataTmdb;
-        private static PropertyInfo _imdbIdMovieDataTmdb;
-        private static PropertyInfo _originalLanguageMovieDataTmdb;
-        private static PropertyInfo _tmdbIdSeriesDataTmdb;
-        private static PropertyInfo _languagesSeriesDataTmdb;
-        private static PropertyInfo _movieDataTmdbTaskResult;
-        private static PropertyInfo _seriesDataTmdbTaskResult;
+        private static MethodInfo _getBackdrops;
 
         private static Assembly _tvdbAssembly;
         private static MethodInfo _ensureMovieInfoTvdb;
         private static MethodInfo _ensureSeriesInfoTvdb;
-        private static PropertyInfo _tvdbIdMovieDataTvdb;
-        private static PropertyInfo _originalLanguageMovieDataTvdb;
-        private static PropertyInfo _tvdbIdSeriesDataTvdb;
-        private static PropertyInfo _originalLanguageSeriesDataTvdb;
-        private static PropertyInfo _movieDataTvdbTaskResult;
-        private static PropertyInfo _seriesDataTvdbTaskResult;
-
-        private static MethodInfo _getBackdrops;
-        private static PropertyInfo file_path;
-        private static PropertyInfo iso_639_1;
 
         private static MethodInfo _getAvailableRemoteImages;
         private static MethodInfo _addLocalImage;
@@ -98,25 +81,14 @@ namespace StrmAssistant.Mod
                     BindingFlags.Instance | BindingFlags.NonPublic, null,
                     new[] { typeof(BaseItem), typeof(string), typeof(IJsonSerializer), typeof(CancellationToken) },
                     null);
-                var completeMovieData = _movieDbAssembly.GetType("MovieDb.MovieDbProvider")
-                    .GetNestedType("CompleteMovieData", BindingFlags.NonPublic);
-                _tmdbIdMovieDataTmdb = completeMovieData.GetProperty("id");
-                _imdbIdMovieDataTmdb = completeMovieData.GetProperty("imdb_id");
-                _originalLanguageMovieDataTmdb = completeMovieData.GetProperty("original_language");
 
                 var movieDbSeriesProvider = _movieDbAssembly.GetType("MovieDb.MovieDbSeriesProvider");
                 _ensureSeriesInfo = movieDbSeriesProvider.GetMethod("EnsureSeriesInfo",
                     BindingFlags.Instance | BindingFlags.NonPublic);
-                var seriesRootObject = movieDbSeriesProvider.GetNestedType("SeriesRootObject", BindingFlags.Public);
-                _tmdbIdSeriesDataTmdb = seriesRootObject.GetProperty("id");
-                _languagesSeriesDataTmdb = seriesRootObject.GetProperty("languages");
 
                 var movieDbProviderBase = _movieDbAssembly.GetType("MovieDb.MovieDbProviderBase");
                 _getBackdrops = movieDbProviderBase.GetMethod("GetBackdrops",
                     BindingFlags.Instance | BindingFlags.NonPublic);
-                var tmdbImage = _movieDbAssembly.GetType("MovieDb.TmdbImage");
-                file_path = tmdbImage.GetProperty("file_path");
-                iso_639_1 = tmdbImage.GetProperty("iso_639_1");
             }
             else
             {
@@ -135,12 +107,6 @@ namespace StrmAssistant.Mod
                 var tvdbSeriesProvider = _tvdbAssembly.GetType("Tvdb.TvdbSeriesProvider");
                 _ensureSeriesInfoTvdb = tvdbSeriesProvider.GetMethod("EnsureSeriesInfo",
                     BindingFlags.NonPublic | BindingFlags.Instance);
-                var movieData = _tvdbAssembly.GetType("Tvdb.MovieData");
-                _tvdbIdMovieDataTvdb = movieData.GetProperty("id");
-                _originalLanguageMovieDataTvdb = movieData.GetProperty("originalLanguage");
-                var seriesData = _tvdbAssembly.GetType("Tvdb.SeriesData");
-                _tvdbIdSeriesDataTvdb = seriesData.GetProperty("id");
-                _originalLanguageSeriesDataTvdb = seriesData.GetProperty("originalLanguage");
             }
             else
             {
@@ -287,15 +253,23 @@ namespace StrmAssistant.Mod
         private static void GetMovieInfoTmdbPostfix(BaseItem item, string language, IJsonSerializer jsonSerializer,
             CancellationToken cancellationToken, Task __result)
         {
-            if (_movieDataTmdbTaskResult is null)
-                _movieDataTmdbTaskResult = __result.GetType().GetProperty("Result");
+            object movieData = null;
 
-            var movieData = _movieDataTmdbTaskResult?.GetValue(__result);
-            if (movieData != null && _tmdbIdMovieDataTmdb != null && _imdbIdMovieDataTmdb != null && _originalLanguageMovieDataTmdb != null)
+            try
             {
-                var tmdbId = _tmdbIdMovieDataTmdb.GetValue(movieData)?.ToString();
-                var imdbId = _imdbIdMovieDataTmdb.GetValue(movieData) as string;
-                var originalLanguage = _originalLanguageMovieDataTmdb.GetValue(movieData) as string;
+                movieData = Traverse.Create(__result).Property("Result").GetValue();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            if (movieData != null)
+            {
+                var tmdbId = Traverse.Create(movieData).Property("id").GetValue<int>().ToString();
+                var imdbId = Traverse.Create(movieData).Property("imdb_id").GetValue<string>();
+                var originalLanguage = Traverse.Create(movieData).Property("original_language").GetValue<string>();
+
                 if ((!string.IsNullOrEmpty(tmdbId) || !string.IsNullOrEmpty(imdbId)) &&
                     !string.IsNullOrEmpty(originalLanguage))
                 {
@@ -305,24 +279,32 @@ namespace StrmAssistant.Mod
         }
 
         [HarmonyPostfix]
-        private static void EnsureSeriesInfoTmdbPostfix(string tmdbId, string language, CancellationToken cancellationToken,
-            Task __result)
+        private static void EnsureSeriesInfoTmdbPostfix(string tmdbId, string language,
+            CancellationToken cancellationToken, Task __result)
         {
             if (WasCalledByMethod(_movieDbAssembly, "FetchImages")) WasCalledByImageProvider.Value = true;
 
-            __result.GetAwaiter().GetResult();
+            object seriesInfo = null;
+
+            try
+            {
+                seriesInfo = Traverse.Create(__result).Property("Result").GetValue();
+            }
+            catch
+            {
+                // ignored
+            }
 
             if (!WasCalledByImageProvider.Value) return;
 
-            if (_seriesDataTmdbTaskResult is null)
-                _seriesDataTmdbTaskResult = __result.GetType().GetProperty("Result");
-
-            var seriesInfo = _seriesDataTmdbTaskResult?.GetValue(__result);
-            if (seriesInfo != null && _tmdbIdSeriesDataTmdb != null && _languagesSeriesDataTmdb != null)
+            if (seriesInfo != null)
             {
-                var id = _tmdbIdSeriesDataTmdb.GetValue(seriesInfo)?.ToString();
-                var originalLanguage = (_languagesSeriesDataTmdb.GetValue(seriesInfo) as List<string>)
+                var id = Traverse.Create(seriesInfo).Property("id").GetValue<int>().ToString();
+                var originalLanguage = Traverse.Create(seriesInfo)
+                    .Property("languages")
+                    .GetValue<List<string>>()
                     ?.FirstOrDefault();
+
                 if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(originalLanguage))
                 {
                     UpdateOriginalLanguage(id, null, null, originalLanguage);
@@ -336,18 +318,24 @@ namespace StrmAssistant.Mod
         {
             if (WasCalledByMethod(_tvdbAssembly, "GetImages")) WasCalledByImageProvider.Value = true;
 
-            __result.GetAwaiter().GetResult();
+            object movieData = null;
+
+            try
+            {
+                movieData = Traverse.Create(__result).Property("Result").GetValue();
+            }
+            catch
+            {
+                // ignored
+            }
 
             if (!WasCalledByImageProvider.Value) return;
 
-            if (_movieDataTvdbTaskResult is null)
-                _movieDataTvdbTaskResult = __result.GetType().GetProperty("Result");
-
-            var movieData = _movieDataTvdbTaskResult?.GetValue(__result);
-            if (movieData != null && _tvdbIdMovieDataTvdb != null && _originalLanguageMovieDataTvdb != null)
+            if (movieData != null)
             {
-                var id = _tvdbIdMovieDataTvdb.GetValue(movieData)?.ToString();
-                var originalLanguage = _originalLanguageMovieDataTvdb.GetValue(movieData) as string;
+                var id = Traverse.Create(movieData).Property("id").GetValue<int>().ToString();
+                var originalLanguage = Traverse.Create(movieData).Property("originalLanguage").GetValue<string>();
+
                 if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(originalLanguage))
                 {
                     var convertedLanguage = Plugin.MetadataApi.ConvertToServerLanguage(originalLanguage);
@@ -362,19 +350,24 @@ namespace StrmAssistant.Mod
         {
             if (WasCalledByMethod(_tvdbAssembly, "GetImages")) WasCalledByImageProvider.Value = true;
 
-            __result.GetAwaiter().GetResult();
+            object seriesData = null;
+
+            try
+            {
+                seriesData = Traverse.Create(__result).Property("Result").GetValue();
+            }
+            catch
+            {
+                // ignored
+            }
 
             if (!WasCalledByImageProvider.Value) return;
 
-            if (_seriesDataTvdbTaskResult is null)
-                _seriesDataTvdbTaskResult = __result.GetType().GetProperty("Result");
-
-            var seriesData = _seriesDataTvdbTaskResult?.GetValue(__result);
-            if (seriesData != null && _tvdbIdSeriesDataTvdb != null &&
-                _originalLanguageSeriesDataTvdb != null)
+            if (seriesData != null)
             {
-                var id = _tvdbIdSeriesDataTvdb.GetValue(seriesData)?.ToString();
-                var originalLanguage = _originalLanguageSeriesDataTvdb.GetValue(seriesData) as string;
+                var id = Traverse.Create(seriesData).Property("id").GetValue<int>().ToString();
+                var originalLanguage = Traverse.Create(seriesData).Property("originalLanguage").GetValue<string>();
+
                 if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(originalLanguage))
                 {
                     var convertedLanguage = Plugin.MetadataApi.ConvertToServerLanguage(originalLanguage);
@@ -384,21 +377,20 @@ namespace StrmAssistant.Mod
         }
 
         [HarmonyPostfix]
-        private static void GetBackdropsPostfix(IEnumerable __result)
+        private static void GetBackdropsPostfix(IEnumerable<object> __result)
         {
-            if (__result != null && file_path != null && iso_639_1 != null)
+            if (__result != null)
             {
-                var resultList = __result.Cast<object>().ToList();
-
-                foreach (var item in resultList)
+                foreach (var image in __result)
                 {
-                    var filePath = file_path.GetValue(item) as string;
-                    var language = iso_639_1.GetValue(item) as string;
+                    var filePath = Traverse.Create(image).Property("file_path").GetValue<string>();
+                    var languageProperty = Traverse.Create(image).Property("iso_639_1");
+                    var language = languageProperty.GetValue<string>();
 
                     if (!string.IsNullOrEmpty(filePath) && !string.IsNullOrEmpty(language))
                     {
                         BackdropByLanguage[filePath] = language;
-                        iso_639_1.SetValue(item, null);
+                        languageProperty.SetValue(null);
                     }
                 }
             }
@@ -424,7 +416,16 @@ namespace StrmAssistant.Mod
             Task<IEnumerable<RemoteImageInfo>> __result, BaseItem item, LibraryOptions libraryOptions,
             RemoteImageQuery query, IDirectoryService directoryService, CancellationToken cancellationToken)
         {
-            var result = __result.Result;
+            IEnumerable<RemoteImageInfo> result = null;
+
+            try
+            {
+                result = __result.Result;
+            }
+            catch
+            {
+                // ignored
+            }
 
             if (result is null) return Task.FromResult(Enumerable.Empty<RemoteImageInfo>());
 
