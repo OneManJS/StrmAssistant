@@ -482,7 +482,8 @@ namespace StrmAssistant.Mod
                 {
                     updateType &= ~ItemUpdateType.MetadataDownload;
                 }
-                else if (!CurrentRefreshContext.Value.HasMetadataFetchers)
+                else if (!IsExclusiveFeatureSelected(ExclusiveControl.NoNfoSaverOptimization) &&
+                         !CurrentRefreshContext.Value.HasMetadataFetchers)
                 {
                     updateType &= ~ItemUpdateType.MetadataDownload;
                 }
@@ -535,7 +536,7 @@ namespace StrmAssistant.Mod
                                 .DeserializeMediaInfo(__instance, directoryService, "Exclusive Restore",
                                     ignoreFileChange).ConfigureAwait(false);
                         }
-                        else
+                        else if (!CurrentRefreshContext.Value.IsFileChanged)
                         {
                             _ = Plugin.MediaInfoApi.SerializeMediaInfo(__instance.InternalId, directoryService, false,
                                 "Exclusive Non-existent").ConfigureAwait(false);

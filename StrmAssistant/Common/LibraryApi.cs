@@ -172,9 +172,8 @@ namespace StrmAssistant.Common
             return item.GetMediaStreams().Any(i => i.Type == MediaStreamType.Video || i.Type == MediaStreamType.Audio);
         }
 
-        public bool ImageCaptureEnabled(BaseItem item)
+        public bool ImageCaptureEnabled(BaseItem item, LibraryOptions libraryOptions)
         {
-            var libraryOptions = _libraryManager.GetLibraryOptions(item);
             var typeName = item.ExtraType == null ? item.GetType().Name : item.DisplayParent.GetType().Name;
             var typeOptions = libraryOptions.GetTypeOptions(typeName);
 
@@ -510,12 +509,14 @@ namespace StrmAssistant.Common
             if (Plugin.Instance.MediaInfoExtractStore.GetOptions().PersistMediaInfoMode ==
                 PersistMediaInfoOption.Restore.ToString()) return false;
 
+            var libraryOptions = _libraryManager.GetLibraryOptions(item);
+
             switch (item)
             {
                 case Video _:
-                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item);
+                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item, libraryOptions);
                 case Audio _:
-                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item) &&
+                    return !item.HasImage(ImageType.Primary) && ImageCaptureEnabled(item, libraryOptions) &&
                            item.GetMediaStreams().Any(i => i.Type == MediaStreamType.EmbeddedImage);
                 default:
                     return false;
@@ -672,20 +673,20 @@ namespace StrmAssistant.Common
 
             var collectionFolders = (BaseItem[])_libraryManager.GetCollectionFolders(taskItem);
             var libraryOptions = _libraryManager.GetLibraryOptions(taskItem);
+
             var dummyLibraryOptions = CopyLibraryOptions(libraryOptions);
             dummyLibraryOptions.DisabledLocalMetadataReaders = new[] { "Nfo" };
             dummyLibraryOptions.MetadataSavers = Array.Empty<string>();
+
             foreach (var option in dummyLibraryOptions.TypeOptions)
             {
                 option.MetadataFetchers = Array.Empty<string>();
             }
 
-            var imageCapture = false;
-
-            if (!extractSkip && enableImageCapture && !taskItem.HasImage(ImageType.Primary))
+            if (!extractSkip && enableImageCapture && !taskItem.HasImage(ImageType.Primary) &&
+                ImageCaptureEnabled(taskItem, libraryOptions))
             {
                 EnableImageCapture.AllowImageCaptureInstance(taskItem);
-                imageCapture = true;
 
                 refreshOptions.ImageRefreshMode = MetadataRefreshMode.FullRefresh;
                 refreshOptions.ReplaceAllImages = true;
@@ -696,8 +697,7 @@ namespace StrmAssistant.Common
                     .RefreshSingleItem(taskItem, refreshOptions, collectionFolders, dummyLibraryOptions,
                         cancellationToken).ConfigureAwait(false);
             }
-
-            if (!imageCapture)
+            else
             {
                 if (persistMediaInfo)
                 {

@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
@@ -199,7 +199,7 @@ namespace StrmAssistant.Common
             var mediaInfoJsonPath = GetMediaInfoJsonPath(item);
             var file = directoryService.GetFile(mediaInfoJsonPath);
 
-            if (overwrite || file?.Exists != true || Plugin.LibraryApi.HasFileChanged(item, directoryService))
+            if (overwrite || file?.Exists != true)
             {
                 try
                 {
@@ -311,7 +311,7 @@ namespace StrmAssistant.Common
                             .DeserializeFromFileAsync<List<MediaSourceWithChapters>>(mediaInfoJsonPath)
                             .ConfigureAwait(false)).ToArray()[0];
 
-                    if (mediaSourceWithChapters.MediaSourceInfo.RunTimeTicks.HasValue &&
+                    if (mediaSourceWithChapters?.MediaSourceInfo?.RunTimeTicks.HasValue is true &&
                         (ignoreFileChange || !Plugin.LibraryApi.HasFileChanged(item, directoryService)))
                     {
                         foreach (var subtitle in mediaSourceWithChapters.MediaSourceInfo.MediaStreams.Where(m =>

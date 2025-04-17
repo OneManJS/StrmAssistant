@@ -659,4 +659,7 @@
   <data name="MergeScopeOption_FolderScope_FolderScope" xml:space="preserve">
     <value>同目录合并</value>
   </data>
+  <data name="ExclusiveControl_NoNfoSaverOptimization_No_Nfo_Saver_Optimization" xml:space="preserve">
+    <value>无NFO保存优化</value>
+  </data>
 </root>

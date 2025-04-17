@@ -278,6 +278,15 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to No Nfo Saver Optimization.
+        /// </summary>
+        public static string ExclusiveControl_NoNfoSaverOptimization_No_Nfo_Saver_Optimization {
+            get {
+                return ResourceManager.GetString("ExclusiveControl_NoNfoSaverOptimization_No_Nfo_Saver_Optimization", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to No Persist Integration.
         /// </summary>
         public static string ExclusiveControl_NoPersistIntegration_NoPersistIntegration {
@@ -1062,7 +1071,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to FolderScope.
+        ///   Looks up a localized string similar to Folder Scope.
         /// </summary>
         public static string MergeScopeOption_FolderScope_FolderScope {
             get {
@@ -1156,7 +1165,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Block Non Fallback Language.
+        ///   Looks up a localized string similar to Block Non Fallback Language Overview.
         /// </summary>
         public static string MetadataEnhanceOptions_BlockNonFallbackLanguage_Block_Non_Fallback_Language {
             get {
@@ -1259,7 +1268,7 @@ namespace StrmAssistant.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Episode metadata refresh scope for scheduled task and catch-up. Default is No Overview and No Image..
+        ///   Looks up a localized string similar to Episode metadata refresh scope for scheduled task and catch-up across all TV show libraries. Default is No Overview and No Image..
         /// </summary>
         public static string MetadataEnhanceOptions_EpisodeRefreshScope_Episode_refresh_scope_for_scheduled_task_and_catch_up__Default_is_no_overview_and_no_image_ {
             get {

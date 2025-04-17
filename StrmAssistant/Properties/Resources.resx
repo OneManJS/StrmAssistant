@@ -746,4 +746,7 @@
   <data name="MergeScopeOption_FolderScope_FolderScope" xml:space="preserve">
     <value>Folder Scope</value>
   </data>
+  <data name="ExclusiveControl_NoNfoSaverOptimization_No_Nfo_Saver_Optimization" xml:space="preserve">
+    <value>No Nfo Saver Optimization</value>
+  </data>
 </root>
