@@ -1,5 +1,4 @@
-﻿#if DEBUG
-using MediaBrowser.Controller.Entities;
+﻿using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Tasks;
@@ -57,11 +56,10 @@ namespace StrmAssistant.ScheduledTask
             return Array.Empty<TaskTriggerInfo>();
         }
 
-        public bool IsHidden => false;
+        public bool IsHidden => !Plugin.Instance.DebugMode;
 
-        public bool IsEnabled => true;
+        public bool IsEnabled => Plugin.Instance.DebugMode;
         
         public bool IsLogged => true;
     }
 }
-#endif
