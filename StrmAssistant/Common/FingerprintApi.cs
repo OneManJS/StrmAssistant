@@ -446,7 +446,9 @@ namespace StrmAssistant.Common
                 .IntroDetectionFingerprintMinutes);
         }
 
-        public async Task UpdateIntroMarkerForSeason(Season season, CancellationToken cancellationToken)
+#nullable enable
+        public async Task UpdateIntroMarkerForSeason(Season season, CancellationToken cancellationToken,
+            IProgress<double>? progress = null)
         {
             var introDetectionFingerprintMinutes =
                 Plugin.Instance.IntroSkipStore.GetOptions().IntroDetectionFingerprintMinutes;
@@ -465,16 +467,25 @@ namespace StrmAssistant.Common
             var allEpisodes = season.GetEpisodes(episodeQuery).Items.OfType<Episode>().ToArray();
 
             episodeQuery.WithoutChapterMarkers = new[] { MarkerType.IntroStart };
-            var episodesWithoutMarkers = season.GetEpisodes(episodeQuery).Items.OfType<Episode>().ToArray();
+            var episodesWithoutMarkers = season.GetEpisodes(episodeQuery).Items.OfType<Episode>().ToList();
 
             var seasonFingerprintInfo = await GetAllFingerprintFilesForSeason(season,
                 allEpisodes, libraryOptions, directoryService, cancellationToken).ConfigureAwait(false);
+
+            double total = episodesWithoutMarkers.Count;
+            var index = 0;
 
             foreach (var episode in episodesWithoutMarkers)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 UpdateSequencesForSeason(season, seasonFingerprintInfo, episode, libraryOptions, directoryService);
+
+                index++;
+                progress?.Report(index / total);
             }
+
+            progress?.Report(1.0);
         }
+#nullable restore
     }
 }

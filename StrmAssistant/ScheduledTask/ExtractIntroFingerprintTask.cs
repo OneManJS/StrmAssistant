@@ -1,3 +1,4 @@
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
@@ -5,6 +6,7 @@ using MediaBrowser.Model.Tasks;
 using StrmAssistant.Common;
 using StrmAssistant.Properties;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -63,23 +65,28 @@ namespace StrmAssistant.ScheduledTask
             var groupedBySeason = episodes.GroupBy(e => e.Season).ToList();
             var seasonTasks = new List<Task>();
 
-            _logger.Info($"IntroFingerprintExtract - Number of seasons: {groupedBySeason.Count}");
-            _logger.Info($"IntroFingerprintExtract - Number of episodes: {episodes.Count}");
+            double totalSeasons = groupedBySeason.Count;
+            double totalEpisodes = episodes.Count;
 
-            if (episodes.Count > 0) IsRunning = true;
+            _logger.Info($"IntroFingerprintExtract - Number of seasons: {totalSeasons}");
+            _logger.Info($"IntroFingerprintExtract - Number of episodes: {totalEpisodes}");
+
+            if (totalEpisodes > 0) IsRunning = true;
 
             var directoryService = new DirectoryService(_logger, _fileSystem);
 
-            double total = episodes.Count;
-            var index = 0;
-            var current = 0;
+            var episodeIndex = 0;
+            var seasonIndex = 0;
+            var processedEpisodes = 0;
+            var processedSeasons = 0;
             var episodeSkipCount = 0;
             var seasonSkipCount = 0;
+            var episodeWeight = !mediaInfoRestoreMode ? 0.8 : 1.0;
+            var seasonWeight = !mediaInfoRestoreMode ? 0.2 : 0.0;
+            var seasonProgressMap = new ConcurrentDictionary<Season, double>();
 
             foreach (var season in groupedBySeason)
             {
-                var taskSeason = season.Key;
-
                 if (cancellationToken.IsCancellationRequested)
                 {
                     _logger.Info("IntroFingerprintExtract - Scheduled Task Cancelled");
@@ -109,7 +116,7 @@ namespace StrmAssistant.ScheduledTask
                         return;
                     }
 
-                    var taskIndex = ++index;
+                    var taskEpisodeIndex = ++episodeIndex;
                     var task = Task.Run(async () =>
                     {
                         bool? result1 = null;
@@ -193,84 +200,108 @@ namespace StrmAssistant.ScheduledTask
 
                             QueueManager.MasterSemaphore.Release();
 
-                            var currentCount = Interlocked.Increment(ref current);
-                            progress.Report(currentCount / total * 100);
+                            var currentCount = Interlocked.Increment(ref processedEpisodes);
+
+                            var totalSeasonFraction = seasonProgressMap.Values.Sum();
+                            var currentProgress = episodeWeight * currentCount / totalEpisodes +
+                                                  seasonWeight * (processedSeasons + totalSeasonFraction) /
+                                                  totalSeasons;
+                            progress.Report(currentProgress * 100);
 
                             if (!mediaInfoRestoreMode)
                             {
                                 _logger.Info(
-                                    $"IntroFingerprintExtract - Progress {currentCount}/{total} - Task {taskIndex}: {taskEpisode.Path}");
+                                    $"IntroFingerprintExtract - Episode Progress {currentCount}/{totalEpisodes} - Task {taskEpisodeIndex}: {taskEpisode.Path}");
                             }
                         }
                     }, cancellationToken);
                     episodeTasks.Add(task);
                 }
 
-                if (seasonSkip)
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Info("IntroFingerprintExtract - Scheduled Task Cancelled");
+                    return;
+                }
+
+                var taskSeason = season.Key;
+
+                var seasonProgress = new Progress<double>(fraction =>
+                {
+                    seasonProgressMap[taskSeason] = fraction;
+                    var totalSeasonFraction = seasonProgressMap.Values.Sum();
+
+                    var currentProgress = episodeWeight * processedEpisodes / totalEpisodes +
+                                          seasonWeight * (processedSeasons + totalSeasonFraction) / totalSeasons;
+                    progress.Report(currentProgress * 100);
+                });
+
+                var taskSeasonIndex = ++seasonIndex;
+                var seasonTask = Task.Run(async () =>
                 {
                     await Task.WhenAll(episodeTasks).ConfigureAwait(false);
 
-                    if (!mediaInfoRestoreMode)
+                    if (seasonSkip)
                     {
-                        _logger.Info(
-                            $"IntroFingerprintExtract - Season Skipped: {taskSeason.Name} - {taskSeason.Path}");
+                        if (!mediaInfoRestoreMode)
+                        {
+                            _logger.Info(
+                                $"IntroFingerprintExtract - Season Skipped: {taskSeason.Name} - {taskSeason.Path}");
+                        }
+
+                        Interlocked.Increment(ref seasonSkipCount);
+                        return;
                     }
 
-                    Interlocked.Increment(ref seasonSkipCount);
-                }
-                else
-                {
+                    try
+                    {
+                        await QueueManager.Tier2Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        return;
+                    }
+
                     if (cancellationToken.IsCancellationRequested)
                     {
+                        QueueManager.Tier2Semaphore.Release();
                         _logger.Info("IntroFingerprintExtract - Scheduled Task Cancelled");
                         return;
                     }
 
-                    var seasonTask = Task.Run(async () =>
+                    try
                     {
-                        await Task.WhenAll(episodeTasks).ConfigureAwait(false);
+                        await Plugin.FingerprintApi
+                            .UpdateIntroMarkerForSeason(taskSeason, cancellationToken, seasonProgress)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.Info("IntroFingerprintExtract - Season cancelled: " + taskSeason.Name + " - " +
+                                     taskSeason.Path);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Error("IntroFingerprintExtract - Season failed: " + taskSeason.Name + " - " +
+                                      taskSeason.Path);
+                        _logger.Error(e.Message);
+                        _logger.Debug(e.StackTrace);
+                    }
+                    finally
+                    {
+                        QueueManager.Tier2Semaphore.Release();
 
-                        try
-                        {
-                            await QueueManager.Tier2Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-                        }
-                        catch
-                        {
-                            return;
-                        }
+                        seasonProgressMap.TryRemove(taskSeason, out _);
+                        var currentCount = Interlocked.Increment(ref processedSeasons);
 
-                        if (cancellationToken.IsCancellationRequested)
+                        if (!mediaInfoRestoreMode)
                         {
-                            QueueManager.Tier2Semaphore.Release();
-                            _logger.Info("IntroFingerprintExtract - Scheduled Task Cancelled");
-                            return;
+                            _logger.Info(
+                                $"IntroFingerprintExtract - Season Progress {currentCount}/{totalSeasons} - Task {taskSeasonIndex}: {taskSeason.Path}");
                         }
-
-                        try
-                        {
-                            await Plugin.FingerprintApi
-                                .UpdateIntroMarkerForSeason(taskSeason, cancellationToken)
-                                .ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            _logger.Info("IntroFingerprintExtract - Season cancelled: " + taskSeason.Name + " - " +
-                                         taskSeason.Path);
-                        }
-                        catch (Exception e)
-                        {
-                            _logger.Error("IntroFingerprintExtract - Season failed: " + taskSeason.Name + " - " +
-                                          taskSeason.Path);
-                            _logger.Error(e.Message);
-                            _logger.Debug(e.StackTrace);
-                        }
-                        finally
-                        {
-                            QueueManager.Tier2Semaphore.Release();
-                        }
-                    }, cancellationToken);
-                    seasonTasks.Add(seasonTask);
-                }
+                    }
+                }, cancellationToken);
+                seasonTasks.Add(seasonTask);
             }
 
             await Task.WhenAll(seasonTasks).ConfigureAwait(false);
