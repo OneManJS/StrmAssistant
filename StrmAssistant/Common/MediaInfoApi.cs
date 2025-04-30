@@ -395,16 +395,35 @@ namespace StrmAssistant.Common
 
             var file = directoryService.GetFile(mediaInfoJsonPath);
 
-            if (file?.Exists == true)
+            if (file?.Exists is true)
             {
                 try
                 {
-                    _logger.Info("MediaInfoPersist - Attempting to delete (" + source + "): " + mediaInfoJsonPath);
+                    _logger.Info($"MediaInfoPersist - Attempting to delete ({source}): {mediaInfoJsonPath}");
                     _fileSystem.DeleteFile(mediaInfoJsonPath);
+
+                    var jsonRoot = Plugin.Instance.MediaInfoExtractStore.GetOptions().MediaInfoJsonRootFolder;
+
+                    if (!string.IsNullOrWhiteSpace(jsonRoot))
+                    {
+                        jsonRoot = _fileSystem.GetFullPath(jsonRoot).TrimEnd(Path.DirectorySeparatorChar);
+
+                        var currentDir =
+                            _fileSystem.GetFullPath(_fileSystem.GetDirectoryName(mediaInfoJsonPath) ?? string.Empty);
+
+                        while (!string.IsNullOrEmpty(currentDir) &&
+                               !string.Equals(currentDir, jsonRoot, StringComparison.OrdinalIgnoreCase) &&
+                               CommonUtility.IsDirectoryEmpty(currentDir))
+                        {
+                            _logger.Info(
+                                $"MediaInfoPersist - Attempting to delete empty folder ({source}): {currentDir}");
+                            _fileSystem.DeleteDirectory(currentDir, false);
+                            currentDir = Path.GetDirectoryName(currentDir);
+                        }
+                    }
                 }
                 catch (Exception e)
                 {
-                    _logger.Error("MediaInfoPersist - Failed to delete (" + source + "): " + mediaInfoJsonPath);
                     _logger.Error(e.Message);
                     _logger.Debug(e.StackTrace);
                 }
