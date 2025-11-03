@@ -6,6 +6,7 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Services;
+using StrmAssistant.Common;
 using StrmAssistant.Provider;
 using System;
 using System.Collections.Generic;

@@ -1,6 +1,7 @@
 using HarmonyLib;
 using MediaBrowser.Controller.Entities;
 using SQLitePCL.pretty;
+using StrmAssistant.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
