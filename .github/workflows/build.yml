@@ -49,7 +49,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: StrmAssistantLite-${{ github.run_number }}
-          path: |
-            StrmAssistant/bin/Release/net6.0/StrmAssistantLite.dll
+          path: C:\Users\runneradmin\AppData\Roaming\Emby-Server\programdata\plugins\*
           compression-level: 0  # DLL已经是二进制，不需要压缩
           retention-days: 30
