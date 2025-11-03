@@ -2,18 +2,6 @@ name: Build Plugin
 
 on:
   workflow_dispatch:  # 仅允许手动触发
-  push:
-    branches:
-      - main
-      - tab-ui
-      - simple-ui
-      - lite
-  pull_request:
-    branches:
-      - main
-      - tab-ui
-      - simple-ui
-      - lite
 
 jobs:
   build:
