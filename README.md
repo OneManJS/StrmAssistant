@@ -2,6 +2,8 @@
 
 ![logo](StrmAssistant/Properties/thumb.png "logo")
 
+## 基于社区版，使用AI进行对最新版Emby进行适配，有问题不解决，请转至[[Pro版本]](https://github.com/sjtuross/StrmAssistant)
+
 ## [[English]](README.en.md)
 
 ## 版本信息
@@ -80,11 +82,6 @@ dotnet build -c Release
 
 构建产物位于: `StrmAssistant/bin/Release/net6.0/StrmAssistantLite.dll`
 
-## 赞赏
-
-如果这个项目对你有帮助，不妨请我喝杯咖啡。如果你欣赏这个项目，欢迎为它点亮一颗⭐️。感谢你对开源精神的认可与支持！
-
-![donate](donate.png "donate")
 
 ## 声明
 
